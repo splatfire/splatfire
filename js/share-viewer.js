@@ -3,7 +3,7 @@
 // and drives a PanoViewer over the inlined tour data.
 
 import { PanoViewer } from 'viewer';
-import { measurementLabel } from 'measure';
+import { measurementLabel, DEFAULT_CAMERA_HEIGHT } from 'measure';
 
 function dataUrlToBlob(dataUrl) {
   const [head, body] = dataUrl.split(',');
@@ -94,7 +94,7 @@ export async function start(tour) {
     viewer.setLines((scene.measurements ?? []).map((m) => ({
       a: m.a,
       b: m.b,
-      label: measurementLabel(m, scene.cameraHeight ?? 1.4),
+      label: measurementLabel(m, scene.cameraHeight ?? DEFAULT_CAMERA_HEIGHT),
     })));
   }
 

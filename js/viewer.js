@@ -205,7 +205,10 @@ export class PanoViewer {
     });
   }
 
-  /** Replace the panorama texture with the given image Blob, fading over it. */
+  /**
+   * Replace the panorama texture with the given image Blob, fading over it.
+   * Rejects if the image cannot be decoded; the fade always clears.
+   */
   async showPanorama(blob, view) {
     this.fadeEl.style.opacity = '1';
     await new Promise((r) => setTimeout(r, 250));
@@ -218,15 +221,14 @@ export class PanoViewer {
       this.material.map = texture;
       this.material.color.set(0xffffff);
       this.material.needsUpdate = true;
+      if (view) {
+        this.lon = view.lon;
+        this.lat = view.lat;
+      }
     } finally {
       URL.revokeObjectURL(url);
+      this.fadeEl.style.opacity = '0';
     }
-
-    if (view) {
-      this.lon = view.lon;
-      this.lat = view.lat;
-    }
-    this.fadeEl.style.opacity = '0';
   }
 
   clearPanorama() {

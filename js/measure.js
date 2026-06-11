@@ -1,5 +1,8 @@
 import { lonLatToVector } from 'viewer';
 
+// Typical tripod / chest height; used when a room has no calibrated height yet.
+export const DEFAULT_CAMERA_HEIGHT = 1.4;
+
 // Treat rays this close to the horizon as unusable for floor intersection.
 const FLOOR_EPS = -0.05;
 
@@ -17,7 +20,7 @@ export function isFloorPoint(p) {
  *
  * Returns { kind: 'floor'|'height', meters } or null if not measurable.
  */
-export function solveMeasurement(a, b, cameraHeight) {
+function solveMeasurement(a, b, cameraHeight) {
   const da = lonLatToVector(a.lon, a.lat, 1);
   const db = lonLatToVector(b.lon, b.lat, 1);
   if (da.y >= FLOOR_EPS) return null; // first point must be on the floor
@@ -39,7 +42,7 @@ export function solveMeasurement(a, b, cameraHeight) {
   return meters > 0 ? { kind: 'height', meters } : null;
 }
 
-export function formatMeters(meters) {
+function formatMeters(meters) {
   return meters < 1 ? `${Math.round(meters * 100)} cm` : `${meters.toFixed(2)} m`;
 }
 

@@ -1,5 +1,5 @@
 import { PanoViewer } from 'viewer';
-import { measurementLabel, isFloorPoint } from 'measure';
+import { measurementLabel, isFloorPoint, DEFAULT_CAMERA_HEIGHT } from 'measure';
 import { createDemoTour } from './demo.js';
 import { RoomCapture } from './capture.js';
 import { exportProjectLink } from './share.js';
@@ -19,8 +19,20 @@ const currentScene = () => tour.scenes.find((s) => s.id === currentSceneId) ?? n
 let saveTimer = null;
 function persist() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => saveTour(tour).catch(console.error), 300);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    saveTour(tour).catch(console.error);
+  }, 300);
 }
+
+// Flush a pending debounced save when the page is being closed or hidden,
+// so quick edit-then-close doesn't lose the last change.
+window.addEventListener('pagehide', () => {
+  if (saveTimer === null) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  saveTour(tour).catch(console.error);
+});
 
 /* ---------- Rendering ---------- */
 
@@ -78,7 +90,7 @@ function renderHotspots(extra = []) {
     viewer.setHotspots([]);
     return;
   }
-  const spots = scene.hotspots.map((h) => ({
+  const spots = (scene.hotspots ?? []).map((h) => ({
     lon: h.lon,
     lat: h.lat,
     type: h.type,
@@ -100,7 +112,7 @@ function renderMeasurements() {
   viewer.setLines(scene.measurements.map((m) => ({
     a: m.a,
     b: m.b,
-    label: measurementLabel(m, scene.cameraHeight ?? 1.4),
+    label: measurementLabel(m, scene.cameraHeight ?? DEFAULT_CAMERA_HEIGHT),
     onClick: () => {
       if (mode !== 'edit') return;
       if (!confirm('Delete this measurement?')) return;
@@ -111,12 +123,26 @@ function renderMeasurements() {
   })));
 }
 
+// Guards against out-of-order panorama loads when rooms are switched rapidly:
+// only the most recent showScene call gets to render its hotspots and lines.
+let showSceneToken = 0;
+
 async function showScene(id) {
   const scene = tour.scenes.find((s) => s.id === id);
   if (!scene) return;
+  const token = ++showSceneToken;
   currentSceneId = id;
   renderSceneList();
-  await viewer.showPanorama(scene.image, scene.view);
+  try {
+    await viewer.showPanorama(scene.image, scene.view);
+  } catch (err) {
+    console.error('Failed to display room', err);
+    if (token === showSceneToken) {
+      alert(`Could not display "${scene.name}" — the image may be corrupt.`);
+    }
+    return;
+  }
+  if (token !== showSceneToken) return;
   renderHotspots();
   renderMeasurements();
 }
@@ -153,7 +179,7 @@ async function addSceneFiles(files) {
   if (!last) return;
   persist();
   renderAll();
-  if (!currentSceneId) await showScene(last.id);
+  await showScene(last.id);
 }
 
 function setStartScene(id) {
@@ -177,7 +203,7 @@ function deleteScene(id) {
   if (!confirm(`Delete room "${scene.name}"? Links pointing to it are removed too.`)) return;
   tour.scenes = tour.scenes.filter((s) => s.id !== id);
   for (const s of tour.scenes) {
-    s.hotspots = s.hotspots.filter((h) => h.targetSceneId !== id);
+    s.hotspots = (s.hotspots ?? []).filter((h) => h.targetSceneId !== id);
   }
   if (tour.startSceneId === id) tour.startSceneId = tour.scenes[0]?.id ?? null;
   persist();
@@ -313,7 +339,7 @@ async function editInfoHotspot(scene, hotspot) {
 
 async function ensureCameraHeight(scene) {
   if (scene.cameraHeight) return true;
-  $('#height-input').value = '1.40';
+  $('#height-input').value = DEFAULT_CAMERA_HEIGHT.toFixed(2);
   if (await openDialog($('#dlg-height')) !== 'ok') return false;
   const h = parseFloat($('#height-input').value);
   if (!(h > 0.3 && h < 3.5)) return false;

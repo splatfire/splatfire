@@ -35,6 +35,7 @@ export class RoomCapture {
 
   /** Runs the capture flow; resolves with a panorama Blob, or null if cancelled. */
   async open() {
+    if (this._resolve) return null; // already capturing
     this.frames = [];
     this.hasGyro = false;
     this.yaw = 0;
@@ -56,6 +57,7 @@ export class RoomCapture {
       // iOS requires an explicit permission request for orientation events.
       await DeviceOrientationEvent?.requestPermission?.();
     } catch { /* denied — fall back to fixed-step mode */ }
+    window.removeEventListener('deviceorientation', this._onOrientation);
     window.addEventListener('deviceorientation', this._onOrientation);
 
     this.overlay.hidden = false;
@@ -100,16 +102,15 @@ export class RoomCapture {
 
   async _finish(cancelled) {
     const frames = this.frames;
+    const resolve = this._resolve;
+    this._resolve = null;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.video.srcObject = null;
     window.removeEventListener('deviceorientation', this._onOrientation);
     this.overlay.hidden = true;
 
-    if (cancelled || !frames.length) {
-      this._resolve(null);
-      return;
-    }
-    this._resolve(await stitch(frames));
+    if (!resolve) return;
+    resolve(cancelled || !frames.length ? null : await stitch(frames));
   }
 }
 

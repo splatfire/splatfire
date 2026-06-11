@@ -1,4 +1,5 @@
 import { uid } from './store.js';
+import { DEFAULT_CAMERA_HEIGHT } from 'measure';
 
 /**
  * Draws a synthetic equirectangular panorama so the app can be tried
@@ -66,7 +67,7 @@ export async function createDemoTour() {
       view: { lon: 0, lat: 0 },
       hotspots: [],
       measurements: [],
-      cameraHeight: 1.4,
+      cameraHeight: DEFAULT_CAMERA_HEIGHT,
     })),
   );
 

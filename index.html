@@ -25,13 +25,13 @@
         <button id="mode-view">View</button>
       </div>
       <button id="btn-add-rooms" title="Add 360° panorama images as rooms">+ Add rooms</button>
-      <button id="btn-capture" title="Capture a room with this device's camera">📷 Capture</button>
+      <button id="btn-capture" title="Capture a room with this device's camera" aria-label="Capture room">📷 Capture</button>
       <button id="btn-demo" title="Load a generated demo tour">Demo tour</button>
       <button id="btn-share" title="Download the tour as a single self-contained HTML page (project link)">Project link</button>
       <button id="btn-export" title="Download the tour as an editable file">Export</button>
       <button id="btn-import" title="Open an exported tour file">Import</button>
       <button id="btn-new" title="Start a new empty tour">New</button>
-      <button id="btn-fullscreen" title="Toggle fullscreen">⛶</button>
+      <button id="btn-fullscreen" title="Toggle fullscreen" aria-label="Toggle fullscreen">⛶</button>
     </div>
   </header>
 
@@ -45,9 +45,9 @@
       <div id="viewer"></div>
 
       <div id="edit-tools" class="floating">
-        <button id="btn-add-link">+ Room link</button>
-        <button id="btn-add-note">+ Note</button>
-        <button id="btn-measure" title="Measure distances and heights in this room">📏 Measure</button>
+        <button id="btn-add-link" title="Place a navigation link to another room">+ Room link</button>
+        <button id="btn-add-note" title="Pin a note with title and text">+ Note</button>
+        <button id="btn-measure" title="Measure distances and heights in this room" aria-label="Measure">📏 Measure</button>
         <button id="btn-set-view" title="Use the current view as this room's starting view">Set start view</button>
       </div>
 
@@ -121,9 +121,9 @@
       <div id="capture-progress"></div>
       <div id="capture-msg"></div>
       <div class="capture-actions">
-        <button id="capture-snap" class="primary">📷 Snap</button>
-        <button id="capture-done" disabled>Done</button>
-        <button id="capture-cancel">Cancel</button>
+        <button id="capture-snap" class="primary" title="Take a photo">📷 Snap</button>
+        <button id="capture-done" disabled title="Stitch the photos into a room">Done</button>
+        <button id="capture-cancel" title="Discard and close the camera">Cancel</button>
       </div>
     </div>
   </div>

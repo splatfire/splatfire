@@ -2,12 +2,14 @@
   --bg: #14161a;
   --panel: #1d2026;
   --panel-2: #262a32;
+  --border: #3a3f48;
   --text: #e8eaed;
   --muted: #9aa0a8;
   --accent: #ff6b35;
   --accent-2: #2f81f7;
   --danger: #e5534b;
   --radius: 8px;
+  --shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
 }
 
 * { box-sizing: border-box; }
@@ -31,8 +33,9 @@ html, body {
   gap: 12px;
   height: 52px;
   padding: 0 14px;
-  background: var(--panel);
+  background: linear-gradient(to bottom, #20242b, var(--panel));
   border-bottom: 1px solid #000;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
 }
 
 .brand {
@@ -61,7 +64,7 @@ html, body {
   padding: 6px 8px;
 }
 
-#tour-name:hover { border-color: #3a3f48; }
+#tour-name:hover { border-color: var(--border); }
 #tour-name:focus { border-color: var(--accent-2); outline: none; background: var(--panel-2); }
 
 .topbar-actions {
@@ -74,14 +77,22 @@ html, body {
 button {
   background: var(--panel-2);
   color: var(--text);
-  border: 1px solid #3a3f48;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 6px 12px;
   font-size: 13px;
   cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-button:hover { background: #2f343d; }
+button:hover { background: #2f343d; border-color: #4a505b; }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: 0.45; cursor: default; transform: none; }
+
+:is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 1px;
+}
 button.primary { background: var(--accent-2); border-color: var(--accent-2); }
 button.primary:hover { filter: brightness(1.1); }
 button.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
@@ -89,7 +100,7 @@ button.danger:hover { background: var(--danger); color: #fff; }
 
 #mode-toggle {
   display: flex;
-  border: 1px solid #3a3f48;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
 }
@@ -121,6 +132,8 @@ button.danger:hover { background: var(--danger); color: #fff; }
   border-right: 1px solid #000;
   overflow-y: auto;
   padding: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 body.view-mode #sidebar { width: 200px; }
@@ -179,7 +192,7 @@ body:not(.view-mode) #scene-list li:hover .scene-actions { display: flex; }
   color: var(--muted);
 }
 
-#scene-list .scene-actions button:hover { color: var(--text); background: #3a3f48; }
+#scene-list .scene-actions button:hover { color: var(--text); background: var(--border); }
 
 /* ---------- Stage / viewer ---------- */
 
@@ -203,13 +216,14 @@ body:not(.view-mode) #scene-list li:hover .scene-actions { display: flex; }
   position: absolute;
   z-index: 5;
   background: rgba(20, 22, 26, 0.85);
-  border: 1px solid #3a3f48;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 8px;
   display: flex;
   gap: 8px;
   align-items: center;
   backdrop-filter: blur(4px);
+  box-shadow: var(--shadow);
 }
 
 #edit-tools {
@@ -241,9 +255,10 @@ body.view-mode #edit-tools { display: none; }
   padding: 24px;
 }
 
-#empty-state h1 { margin: 0; font-size: 22px; }
-#empty-state p { margin: 0 0 12px; color: var(--muted); max-width: 420px; }
-#empty-state div { display: flex; gap: 10px; }
+#empty-state h1 { margin: 0; font-size: 24px; letter-spacing: -0.01em; }
+#empty-state p { margin: 0 0 14px; color: var(--muted); max-width: 420px; }
+#empty-state div { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+#empty-state button { padding: 9px 16px; box-shadow: var(--shadow); }
 
 /* ---------- Hotspots ---------- */
 
@@ -260,6 +275,7 @@ body.view-mode #edit-tools { display: none; }
 }
 
 .hotspot .dot {
+  position: relative;
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -273,6 +289,25 @@ body.view-mode #edit-tools { display: none; }
 }
 
 .hotspot:hover .dot { transform: scale(1.18); }
+
+/* Soft pulse ring so walkable links read as interactive in view mode */
+body.view-mode .hotspot.link .dot::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  animation: hotspot-pulse 2.2s ease-out infinite;
+}
+
+@keyframes hotspot-pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  70%, 100% { transform: scale(1.9); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.view-mode .hotspot.link .dot::after { animation: none; }
+}
 
 .hotspot.link .dot { background: var(--accent); }
 .hotspot.info .dot { background: var(--accent-2); }
@@ -339,7 +374,7 @@ body.view-mode #edit-tools { display: none; }
   align-items: center;
   gap: 10px;
   background: rgba(20, 22, 26, 0.85);
-  border: 1px solid #3a3f48;
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px 18px;
   max-width: min(480px, 92vw);
@@ -355,7 +390,7 @@ body.view-mode #edit-tools { display: none; }
   width: 22px;
   height: 8px;
   border-radius: 4px;
-  background: #3a3f48;
+  background: var(--border);
 }
 
 #capture-progress span.covered { background: var(--accent); }
@@ -373,13 +408,25 @@ body.view-mode #edit-tools { display: none; }
 dialog {
   background: var(--panel);
   color: var(--text);
-  border: 1px solid #3a3f48;
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 18px 20px;
   width: min(380px, 90vw);
+  box-shadow: var(--shadow);
 }
 
-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+dialog[open] { animation: dialog-in 0.15s ease-out; }
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog[open] { animation: none; }
+}
+
+dialog::backdrop { background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(2px); }
 dialog h2 { margin: 0 0 12px; font-size: 16px; }
 dialog p { margin: 0 0 12px; white-space: pre-wrap; }
 
@@ -396,7 +443,7 @@ dialog input, dialog select, dialog textarea {
   margin-top: 4px;
   background: var(--panel-2);
   color: var(--text);
-  border: 1px solid #3a3f48;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 7px 9px;
   font: inherit;
@@ -412,3 +459,38 @@ dialog input, dialog select, dialog textarea {
 }
 
 .dlg-actions .danger { margin-right: auto; }
+
+/* ---------- Narrow screens ---------- */
+
+@media (max-width: 760px) {
+  html, body { overflow: auto; }
+
+  #topbar {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    row-gap: 6px;
+  }
+
+  #tour-name { order: 3; flex: 1 1 100%; max-width: none; }
+  .topbar-actions { flex-wrap: wrap; margin-left: 0; }
+
+  #layout { flex-direction: column; height: auto; min-height: calc(100vh - 100px); }
+
+  /* Room list becomes a horizontal strip above the viewer */
+  #sidebar {
+    width: 100% !important;
+    border-right: none;
+    border-bottom: 1px solid #000;
+    overflow-x: auto;
+    padding: 8px 10px;
+  }
+
+  #scene-list { flex-direction: row; }
+  #scene-list li { flex: none; }
+  #scene-list li.active { box-shadow: inset 0 -2px 0 var(--accent); }
+  #scene-list .scene-actions { display: none !important; }
+
+  #stage { min-height: 60vh; }
+  #edit-tools { flex-wrap: wrap; justify-content: center; max-width: 94vw; }
+}

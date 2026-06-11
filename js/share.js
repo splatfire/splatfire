@@ -2,14 +2,7 @@
 // viewer code, styles, and the whole tour (images inlined as data URLs)
 // embedded. Anyone can open it in a browser — no server, no install.
 
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(blob);
-  });
-}
+import { blobToDataUrl, downloadBlob, tourFilename } from './store.js';
 
 async function fetchText(url) {
   const res = await fetch(url);
@@ -59,12 +52,7 @@ start(${JSON.stringify(data).replace(/</g, '\\u003c')});
 </body>
 </html>`;
 
-  const blob = new Blob([html], { type: 'text/html' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${(tour.name || 'tour').replace(/[^\w\- ]+/g, '').trim() || 'tour'}.html`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  downloadBlob(new Blob([html], { type: 'text/html' }), tourFilename(tour.name, 'html'));
 }
 
 function escapeHtml(s) {
