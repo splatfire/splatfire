@@ -57,13 +57,24 @@
       </div>
 
       <div id="empty-state" hidden>
-        <h1>No rooms yet</h1>
-        <p>Capture a room with your device's camera, add 360° panorama images
-           (equirectangular JPG/PNG), or load the demo tour to look around.</p>
-        <div>
-          <button id="btn-empty-capture">📷 Capture room</button>
-          <button id="btn-empty-add">+ Add rooms</button>
-          <button id="btn-empty-demo">Load demo tour</button>
+        <h1>Build your first tour</h1>
+        <p>Turn real rooms into a walkable 360° experience — capture, link, measure, share.</p>
+        <div class="empty-grid">
+          <button id="btn-empty-capture" class="empty-card">
+            <span class="card-icon">📷</span>
+            <span class="card-title">Capture a room</span>
+            <span class="card-desc">Use this device's camera — snap photos while turning in a circle.</span>
+          </button>
+          <button id="btn-empty-add" class="empty-card">
+            <span class="card-icon">🖼️</span>
+            <span class="card-title">Add panoramas</span>
+            <span class="card-desc">Upload equirectangular 360° images straight from a Theta or Insta360.</span>
+          </button>
+          <button id="btn-empty-demo" class="empty-card">
+            <span class="card-icon">✨</span>
+            <span class="card-title">Load the demo</span>
+            <span class="card-desc">Three generated rooms with links, a note, and a measurement.</span>
+          </button>
         </div>
       </div>
     </main>
