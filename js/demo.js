@@ -65,6 +65,8 @@ export async function createDemoTour() {
       image: await renderPanorama(room),
       view: { lon: 0, lat: 0 },
       hotspots: [],
+      measurements: [],
+      cameraHeight: 1.4,
     })),
   );
 
@@ -82,6 +84,11 @@ export async function createDemoTour() {
       text: 'Drag to look around, scroll to zoom, and click the orange arrows to walk between rooms. Switch to Edit mode to add your own links and notes.',
     },
   );
+  showroom.measurements.push({
+    id: uid(),
+    a: { lon: 95, lat: -35 },
+    b: { lon: 128, lat: -30 },
+  });
   office.hotspots.push(link(showroom, 220));
   workshop.hotspots.push(link(showroom, 320), link(office, 20));
 

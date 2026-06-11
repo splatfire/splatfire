@@ -1,10 +1,14 @@
-import { PanoViewer } from './viewer.js';
+import { PanoViewer } from 'viewer';
+import { measurementLabel, isFloorPoint } from 'measure';
 import { createDemoTour } from './demo.js';
+import { RoomCapture } from './capture.js';
+import { exportProjectLink } from './share.js';
 import { uid, saveTour, loadTour, clearTour, exportTour, importTour } from './store.js';
 
 const $ = (sel) => document.querySelector(sel);
 
 const viewer = new PanoViewer($('#viewer'));
+const capture = new RoomCapture();
 
 let tour = { id: uid(), name: 'Untitled tour', startSceneId: null, scenes: [] };
 let currentSceneId = null;
@@ -25,6 +29,7 @@ function renderAll() {
   $('#empty-state').hidden = tour.scenes.length > 0;
   renderSceneList();
   renderHotspots();
+  renderMeasurements();
 }
 
 function renderSceneList() {
@@ -67,13 +72,13 @@ function renderSceneList() {
   }
 }
 
-function renderHotspots() {
+function renderHotspots(extra = []) {
   const scene = currentScene();
   if (!scene) {
     viewer.setHotspots([]);
     return;
   }
-  viewer.setHotspots(scene.hotspots.map((h) => ({
+  const spots = scene.hotspots.map((h) => ({
     lon: h.lon,
     lat: h.lat,
     type: h.type,
@@ -81,6 +86,28 @@ function renderHotspots() {
       ? tour.scenes.find((s) => s.id === h.targetSceneId)?.name ?? '(missing room)'
       : h.title,
     onClick: () => onHotspotClick(scene, h),
+  }));
+  viewer.setHotspots([...spots, ...extra]);
+}
+
+function renderMeasurements() {
+  const scene = currentScene();
+  if (!scene) {
+    viewer.setLines([]);
+    return;
+  }
+  scene.measurements ??= [];
+  viewer.setLines(scene.measurements.map((m) => ({
+    a: m.a,
+    b: m.b,
+    label: measurementLabel(m, scene.cameraHeight ?? 1.4),
+    onClick: () => {
+      if (mode !== 'edit') return;
+      if (!confirm('Delete this measurement?')) return;
+      scene.measurements = scene.measurements.filter((x) => x.id !== m.id);
+      persist();
+      renderMeasurements();
+    },
   })));
 }
 
@@ -91,29 +118,42 @@ async function showScene(id) {
   renderSceneList();
   await viewer.showPanorama(scene.image, scene.view);
   renderHotspots();
+  renderMeasurements();
 }
 
 /* ---------- Scene management ---------- */
 
-async function addSceneFiles(files) {
-  const images = [...files].filter((f) => f.type.startsWith('image/'));
-  if (!images.length) return;
-  let firstNew = null;
-  for (const file of images) {
-    const scene = {
-      id: uid(),
-      name: file.name.replace(/\.[^.]+$/, '') || 'Room',
-      image: file,
-      view: { lon: 0, lat: 0 },
-      hotspots: [],
-    };
-    tour.scenes.push(scene);
-    firstNew ??= scene.id;
-    tour.startSceneId ??= scene.id;
-  }
+function makeScene(name, imageBlob) {
+  return {
+    id: uid(),
+    name,
+    image: imageBlob,
+    view: { lon: 0, lat: 0 },
+    hotspots: [],
+    measurements: [],
+  };
+}
+
+async function addScene(scene) {
+  tour.scenes.push(scene);
+  tour.startSceneId ??= scene.id;
   persist();
   renderAll();
-  if (!currentSceneId) await showScene(firstNew);
+  await showScene(scene.id);
+}
+
+async function addSceneFiles(files) {
+  const images = [...files].filter((f) => f.type.startsWith('image/'));
+  let last = null;
+  for (const file of images) {
+    last = makeScene(file.name.replace(/\.[^.]+$/, '') || 'Room', file);
+    tour.scenes.push(last);
+    tour.startSceneId ??= last.id;
+  }
+  if (!last) return;
+  persist();
+  renderAll();
+  if (!currentSceneId) await showScene(last.id);
 }
 
 function setStartScene(id) {
@@ -169,19 +209,18 @@ function onHotspotClick(scene, hotspot) {
   }
 }
 
-function startPlacement(onPlaced) {
+function startPlacement(message, onClick) {
   $('#viewer').classList.add('placing');
   $('#placement-hint').hidden = false;
-  viewer.onSphereClick = (pos) => {
-    cancelPlacement();
-    onPlaced(pos);
-  };
+  $('#placement-text').textContent = message;
+  viewer.onSphereClick = onClick;
 }
 
 function cancelPlacement() {
   $('#viewer').classList.remove('placing');
   $('#placement-hint').hidden = true;
   viewer.onSphereClick = null;
+  renderHotspots(); // drop any temporary markers
 }
 
 function openDialog(dlg) {
@@ -270,6 +309,53 @@ async function editInfoHotspot(scene, hotspot) {
   renderHotspots();
 }
 
+/* ---------- Measuring ---------- */
+
+async function ensureCameraHeight(scene) {
+  if (scene.cameraHeight) return true;
+  $('#height-input').value = '1.40';
+  if (await openDialog($('#dlg-height')) !== 'ok') return false;
+  const h = parseFloat($('#height-input').value);
+  if (!(h > 0.3 && h < 3.5)) return false;
+  scene.cameraHeight = h;
+  persist();
+  return true;
+}
+
+async function startMeasure() {
+  const scene = currentScene();
+  if (!scene) return;
+  if (!(await ensureCameraHeight(scene))) return;
+
+  let first = null;
+  startPlacement('Measure: click a point on the floor', (pos) => {
+    if (!first) {
+      if (!isFloorPoint(pos)) {
+        $('#placement-text').textContent = 'That point is above the horizon — start on the floor';
+        return;
+      }
+      first = pos;
+      renderHotspots([{ ...pos, type: 'info', label: 'A' }]); // temporary marker
+      $('#placement-text').textContent =
+        'Now click a second floor point (distance) or a point straight above the first (height)';
+    } else {
+      scene.measurements.push({ id: uid(), a: first, b: pos });
+      cancelPlacement();
+      persist();
+      renderMeasurements();
+    }
+  });
+}
+
+/* ---------- Capture ---------- */
+
+async function captureRoom() {
+  const blob = await capture.open();
+  if (!blob) return;
+  const n = tour.scenes.filter((s) => s.name.startsWith('Captured room')).length + 1;
+  await addScene(makeScene(`Captured room ${n}`, blob));
+}
+
 /* ---------- Mode / top bar ---------- */
 
 function setMode(next) {
@@ -311,6 +397,9 @@ function wireUi() {
     e.target.value = '';
   });
 
+  $('#btn-capture').addEventListener('click', captureRoom);
+  $('#btn-empty-capture').addEventListener('click', captureRoom);
+
   const loadDemo = async () => loadTourObject(await createDemoTour());
   $('#btn-demo').addEventListener('click', loadDemo);
   $('#btn-empty-demo').addEventListener('click', loadDemo);
@@ -319,6 +408,14 @@ function wireUi() {
     if (tour.scenes.length && !confirm('Start a new tour? The current tour is discarded (export it first to keep it).')) return;
     await clearTour().catch(console.error);
     loadTourObject({ id: uid(), name: 'Untitled tour', startSceneId: null, scenes: [] });
+  });
+
+  $('#btn-share').addEventListener('click', () => {
+    if (!tour.scenes.length) {
+      alert('Nothing to share yet — add some rooms first.');
+      return;
+    }
+    exportProjectLink(tour).catch((err) => alert(`Share failed: ${err.message}`));
   });
 
   $('#btn-export').addEventListener('click', () => {
@@ -348,12 +445,19 @@ function wireUi() {
 
   $('#btn-add-link').addEventListener('click', () => {
     if (!currentScene()) return;
-    startPlacement(addLinkHotspot);
+    startPlacement('Click where the link to another room should be', (pos) => {
+      cancelPlacement();
+      addLinkHotspot(pos);
+    });
   });
   $('#btn-add-note').addEventListener('click', () => {
     if (!currentScene()) return;
-    startPlacement(addInfoHotspot);
+    startPlacement('Click where the note should be pinned', (pos) => {
+      cancelPlacement();
+      addInfoHotspot(pos);
+    });
   });
+  $('#btn-measure').addEventListener('click', startMeasure);
   $('#btn-set-view').addEventListener('click', () => {
     const scene = currentScene();
     if (!scene) return;

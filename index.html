@@ -8,7 +8,9 @@
   <script type="importmap">
     {
       "imports": {
-        "three": "./vendor/three.module.js"
+        "three": "./vendor/three.module.js",
+        "viewer": "./js/viewer.js",
+        "measure": "./js/measure.js"
       }
     }
   </script>
@@ -23,8 +25,10 @@
         <button id="mode-view">View</button>
       </div>
       <button id="btn-add-rooms" title="Add 360° panorama images as rooms">+ Add rooms</button>
+      <button id="btn-capture" title="Capture a room with this device's camera">📷 Capture</button>
       <button id="btn-demo" title="Load a generated demo tour">Demo tour</button>
-      <button id="btn-export" title="Download the tour as a shareable file">Export</button>
+      <button id="btn-share" title="Download the tour as a single self-contained HTML page (project link)">Project link</button>
+      <button id="btn-export" title="Download the tour as an editable file">Export</button>
       <button id="btn-import" title="Open an exported tour file">Import</button>
       <button id="btn-new" title="Start a new empty tour">New</button>
       <button id="btn-fullscreen" title="Toggle fullscreen">⛶</button>
@@ -43,18 +47,21 @@
       <div id="edit-tools" class="floating">
         <button id="btn-add-link">+ Room link</button>
         <button id="btn-add-note">+ Note</button>
+        <button id="btn-measure" title="Measure distances and heights in this room">📏 Measure</button>
         <button id="btn-set-view" title="Use the current view as this room's starting view">Set start view</button>
       </div>
 
       <div id="placement-hint" class="floating" hidden>
-        Click anywhere in the panorama to place it — <button id="btn-cancel-place">cancel</button>
+        <span id="placement-text">Click anywhere in the panorama to place it</span> —
+        <button id="btn-cancel-place">cancel</button>
       </div>
 
       <div id="empty-state" hidden>
         <h1>No rooms yet</h1>
-        <p>Add 360° panorama images (equirectangular JPG/PNG) to start building a tour,
-           or load the demo tour to look around.</p>
+        <p>Capture a room with your device's camera, add 360° panorama images
+           (equirectangular JPG/PNG), or load the demo tour to look around.</p>
         <div>
+          <button id="btn-empty-capture">📷 Capture room</button>
           <button id="btn-empty-add">+ Add rooms</button>
           <button id="btn-empty-demo">Load demo tour</button>
         </div>
@@ -92,6 +99,34 @@
       </div>
     </form>
   </dialog>
+
+  <dialog id="dlg-height">
+    <form method="dialog">
+      <h2>Camera height</h2>
+      <p>How high above the floor was the camera when this room was captured?
+         Measurements are computed from this.</p>
+      <label>Height in meters
+        <input id="height-input" type="number" min="0.3" max="3.5" step="0.01" value="1.40" required />
+      </label>
+      <div class="dlg-actions">
+        <button value="cancel">Cancel</button>
+        <button value="ok" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="capture-overlay" hidden>
+    <video id="capture-video" autoplay playsinline muted></video>
+    <div id="capture-hud">
+      <div id="capture-progress"></div>
+      <div id="capture-msg"></div>
+      <div class="capture-actions">
+        <button id="capture-snap" class="primary">📷 Snap</button>
+        <button id="capture-done" disabled>Done</button>
+        <button id="capture-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <dialog id="dlg-note-view">
     <form method="dialog">

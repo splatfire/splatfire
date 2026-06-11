@@ -44,6 +44,15 @@ export class PanoViewer {
     this.sphere = new THREE.Mesh(geometry, this.material);
     this.scene.add(this.sphere);
 
+    this.lineLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    this.lineLayer.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
+    container.appendChild(this.lineLayer);
+    this.lines = []; // { a, b: Vector3, el: SVGLine, labelEl }
+
+    this.lineLabelLayer = document.createElement('div');
+    this.lineLabelLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
+    container.appendChild(this.lineLabelLayer);
+
     this.hotspotLayer = document.createElement('div');
     this.hotspotLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
     container.appendChild(this.hotspotLayer);
@@ -120,6 +129,7 @@ export class PanoViewer {
     this.camera.lookAt(lonLatToVector(this.lon, this.lat));
     this.renderer.render(this.scene, this.camera);
     this._updateHotspots();
+    this._updateLines();
   }
 
   _updateHotspots() {
@@ -136,6 +146,63 @@ export class PanoViewer {
       el.style.left = `${(v.x * 0.5 + 0.5) * w}px`;
       el.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
     }
+  }
+
+  _updateLines() {
+    const { clientWidth: w, clientHeight: h } = this.container;
+    const camDir = this.camera.getWorldDirection(new THREE.Vector3());
+    const v = new THREE.Vector3();
+    const toScreen = (pos) => {
+      v.copy(pos).project(this.camera);
+      return [(v.x * 0.5 + 0.5) * w, (-v.y * 0.5 + 0.5) * h];
+    };
+    for (const line of this.lines) {
+      const visible = line.a.dot(camDir) > 0 && line.b.dot(camDir) > 0;
+      line.el.style.display = visible ? '' : 'none';
+      line.labelEl.style.display = visible ? '' : 'none';
+      if (!visible) continue;
+      const [x1, y1] = toScreen(line.a);
+      const [x2, y2] = toScreen(line.b);
+      line.el.setAttribute('x1', x1);
+      line.el.setAttribute('y1', y1);
+      line.el.setAttribute('x2', x2);
+      line.el.setAttribute('y2', y2);
+      line.labelEl.style.left = `${(x1 + x2) / 2}px`;
+      line.labelEl.style.top = `${(y1 + y2) / 2}px`;
+    }
+  }
+
+  /**
+   * lines: [{ a: {lon,lat}, b: {lon,lat}, label, onClick }]
+   * Used for measurements: a dashed line between two points with a label.
+   */
+  setLines(lines) {
+    this.lineLayer.replaceChildren();
+    this.lineLabelLayer.replaceChildren();
+    this.lines = lines.map((l) => {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      el.setAttribute('class', 'measure-line');
+      this.lineLayer.appendChild(el);
+
+      const labelEl = document.createElement('div');
+      labelEl.className = 'measure-label';
+      labelEl.textContent = l.label;
+      if (l.onClick) {
+        labelEl.style.pointerEvents = 'auto';
+        labelEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          l.onClick();
+        });
+      }
+      this.lineLabelLayer.appendChild(labelEl);
+
+      return {
+        el,
+        labelEl,
+        a: lonLatToVector(l.a.lon, l.a.lat, SPHERE_RADIUS - 10),
+        b: lonLatToVector(l.b.lon, l.b.lat, SPHERE_RADIUS - 10),
+      };
+    });
   }
 
   /** Replace the panorama texture with the given image Blob, fading over it. */
@@ -168,6 +235,7 @@ export class PanoViewer {
     this.material.color.set(0x14161a);
     this.material.needsUpdate = true;
     this.setHotspots([]);
+    this.setLines([]);
   }
 
   /**
