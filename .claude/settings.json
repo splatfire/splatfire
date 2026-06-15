@@ -5,7 +5,8 @@
     "social-media-skills@social-media-skills": true,
     "superpowers@superpowers-marketplace": true,
     "codex@openai-codex": true,
-    "document-skills@anthropic-agent-skills": true
+    "document-skills@anthropic-agent-skills": true,
+    "financial-analysis@claude-for-financial-services": true
   },
   "extraKnownMarketplaces": {
     "marketingskills": {
@@ -48,6 +49,18 @@
       "source": {
         "source": "github",
         "repo": "anthropics/skills"
+      }
+    },
+    "claude-for-financial-services": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/financial-services"
+      }
+    },
+    "claude-for-legal": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-for-legal"
       }
     }
   }
