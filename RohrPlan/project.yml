@@ -1,0 +1,25 @@
+# Fallback-Projektdefinition für XcodeGen (https://github.com/yonaskolb/XcodeGen).
+# Normalerweise nicht nötig — RohrPlan.xcodeproj liegt bei. Falls das Projekt
+# in einer alten Xcode-Version nicht öffnet:  brew install xcodegen && xcodegen generate
+name: RohrPlan
+options:
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  RohrPlan:
+    type: application
+    platform: iOS
+    sources:
+      - RohrPlan
+    info:
+      path: Support/GeneratedInfo.plist
+      properties:
+        NSCameraUsageDescription: RohrPlan nutzt Kamera und LiDAR-Scanner, um Räume und Rohrleitungen zu erfassen.
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.splatfire.rohrplan
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic

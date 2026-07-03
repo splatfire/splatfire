@@ -1,5 +1,9 @@
 # Splatfire — 360° Room Tours
 
+> **Neu:** [RohrPlan](RohrPlan/README.md) — eine native iOS-App (LiDAR +
+> RoomPlan) für Heizungs- und Sanitärplaner: Räume scannen und Rohrleitungen
+> als dauerhafte Plandaten erfassen. Siehe `RohrPlan/`.
+
 A web app for building and walking through virtual tours of real rooms,
 functionally modeled on Immersight-style 3D room viewers (written entirely
 from scratch — no Immersight code or assets are used).
