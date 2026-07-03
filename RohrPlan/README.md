@@ -53,6 +53,9 @@ ARSession**:
 
 ## Bauen & aufs iPhone bringen
 
+Ausführliche Anleitung (inkl. Signierung, Entwicklermodus, Fehlerbehebung):
+**[SETUP-MAC.md](SETUP-MAC.md)**. Kurzfassung:
+
 1. `RohrPlan.xcodeproj` in Xcode öffnen.
 2. Unter *Signing & Capabilities* das eigene Team wählen.
 3. iPhone anschließen, als Ziel wählen, **Run**.
