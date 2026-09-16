@@ -1,0 +1,14 @@
+{
+  "name": "QR-Logbuch",
+  "short_name": "QR-Logbuch",
+  "description": "Anlagen mit QR-Code etikettieren und jeden Serviceeinsatz im Logbuch festhalten — offline auf dem Gerät.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
