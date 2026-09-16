@@ -16,8 +16,9 @@ Code and comments are English, like the rest of this repo.
   date, service interval, free notes, photos.
 - **Logbook entry per visit** — the lead field is *"Was wurde heute gemacht?"*,
   plus findings, material used, next service date and photos. Newest first.
-- **Dictation** — speak the entry instead of typing it with cold hands. See the
-  honest version of "offline" below.
+- **Dictation** — speak the entry instead of typing it with cold hands, field by
+  field, or in one go with the ramble bar below. See the honest version of
+  "offline" further down.
 - **In-app scanner** — native `BarcodeDetector` where the browser has one,
   the vendored jsQR decoder otherwise (iOS). Also reads a QR out of a photo.
 - **Blank labels** — print a sheet of unassigned codes, stick one on, scan it,
@@ -26,6 +27,41 @@ Code and comments are English, like the rest of this repo.
   with no signal is the normal case, not the edge case.
 - **Export / import** — one JSON file with photos inlined, to move data to
   another device or keep a backup.
+
+## The ramble bar
+
+A technician does not dictate field by field. The bar pinned to the bottom of
+the entry form takes one long take — *"Also heute Jahreswartung gemacht, Filter
+gewechselt, Soledruck war eins komma vier bar, die Umwälzpumpe läuft unruhig,
+verbaut habe ich einen Solefilter, nächster Service in einem Jahr"* — and
+proposes where each sentence belongs:
+
+| Field | Gets |
+| --- | --- |
+| Ausgeführte Arbeiten | everything not claimed by another field |
+| Befund / Zustand | sentences about condition: *unruhig, undicht, beobachten, muss ersetzt* |
+| Verbautes Material | *verbaut, eingebaut, Ersatzteil, Stück* |
+| Nächster Service | a date, but only where the sentence is about coming back |
+| Art, Datum | *Wartung / Störung / Reparatur …*, and *gestern / vorgestern* |
+
+It also rewrites spoken decimals, so *"eins komma vier bar"* is stored as
+`1.4 bar` and stays searchable.
+
+**This is a rule-based German parser, not a language model.** It runs entirely
+on the device, which is the whole point — but it gets unusual phrasing wrong.
+So it never writes into the form by itself: it shows what it proposes with a
+checkbox per field, and *"Alles in «Arbeiten»"* dumps the raw transcript into
+one field when the routing guessed badly. Nothing spoken is ever discarded.
+
+The rules live in [`js/parse.js`](js/parse.js) as pure functions, with tests:
+
+```sh
+node --test qrlog/js/parse.test.mjs
+```
+
+Extending it means adding cue words to `FIELD_CUES` / `KIND_CUES` and a test
+case. A real language model would handle phrasing this cannot — but in a static
+app that would mean an API key in the browser, so it needs a backend first.
 
 ## How offline the dictation really is
 

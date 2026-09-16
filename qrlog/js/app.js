@@ -17,6 +17,7 @@ import {
   probe, installOnDevice, Dictation, modeLabel, isSupported,
   probeIsBlocked, resetProbeBlock,
 } from './stt.js';
+import { parseDictation, FIELD_LABELS } from './parse.js';
 
 const $ = (sel) => document.querySelector(sel);
 const view = $('#view');
@@ -225,6 +226,8 @@ const ROUTES = {
 
 async function route() {
   stopDictation();
+  stopRamble();
+  closeRambleSheet();
   releasePhotoUrls();
   $('#menu').hidden = true;
   $('#btn-menu').setAttribute('aria-expanded', 'false');
@@ -555,7 +558,29 @@ async function renderEntry(assetId, entryId) {
         ${existing ? '<button type="button" id="btn-delete-entry" class="danger">Eintrag löschen</button>' : ''}
       </div>
       <p class="muted" id="draft-note"></p>
-    </form>`;
+    </form>
+
+    <div id="ramble-bar">
+      <div id="ramble-live" hidden>
+        <p class="muted">Einfach erzählen: was gemacht, was aufgefallen, was verbaut, wann wieder.</p>
+        <p id="ramble-text"></p>
+      </div>
+      <button type="button" id="btn-ramble" class="primary big">🎤 Einfach erzählen</button>
+    </div>
+
+    <div id="ramble-sheet" class="overlay sheet" hidden>
+      <div class="sheet-body">
+        <h1>Vorschlag</h1>
+        <p class="muted">Übernommen wird nur, was angehakt ist.</p>
+        <div id="ramble-proposal"></div>
+        <details id="ramble-raw"><summary>Gesagter Text</summary><p></p></details>
+        <div class="row">
+          <button type="button" id="ramble-apply" class="primary">Übernehmen</button>
+          <button type="button" id="ramble-all-work">Alles in «Arbeiten»</button>
+          <button type="button" id="ramble-discard">Verwerfen</button>
+        </div>
+      </div>
+    </div>`;
 
   // Textareas are filled after render so user text is never parsed as markup.
   $('#entry-work').value = entry.work ?? '';
@@ -603,9 +628,12 @@ async function renderEntry(assetId, entryId) {
     };
   }
 
+  setupRamble();
+
   form.onsubmit = async (event) => {
     event.preventDefault();
     stopDictation();
+    stopRamble();
     const data = Object.fromEntries(new FormData(form).entries());
     const saved = { ...entry, ...data, assetId, photos };
     if (!saved.work.trim() && !saved.findings.trim()) {
@@ -623,6 +651,163 @@ async function renderEntry(assetId, entryId) {
     toast('Eintrag gespeichert.');
     location.hash = `#/a/${assetId}`;
   };
+}
+
+/* ---------- Ramble: one dictation, sorted into the fields ---------- */
+
+/**
+ * The bar pinned to the bottom of the entry form. A technician holds it down
+ * and talks once — what they did, what they noticed, what they fitted, when
+ * they will be back — and the parser proposes where each sentence belongs.
+ *
+ * Nothing is written into the form until the proposal is confirmed: the parser
+ * is a set of German rules, not a mind reader, and silently rewriting someone's
+ * service record would be worse than making them type it.
+ */
+let ramble = null;
+
+function setupRamble() {
+  const button = $('#btn-ramble');
+  if (!button) return;
+  button.onclick = () => (ramble ? stopRamble() : startRamble());
+  $('#ramble-discard').onclick = closeRambleSheet;
+}
+
+async function startRamble() {
+  const status = await probe(settings.lang, { offlineOnly: settings.offlineDictationOnly });
+  if (status.mode === 'none') {
+    toast(dictationBlockedReason(status));
+    return;
+  }
+
+  stopDictation(); // Only one microphone.
+  const button = $('#btn-ramble');
+  const live = $('#ramble-live');
+  const text = $('#ramble-text');
+  let transcript = '';
+
+  const dictation = new Dictation({
+    lang: settings.lang,
+    onDevice: status.mode === 'on-device',
+    onInterim: (interim) => {
+      text.textContent = `${transcript} ${interim}`.trim();
+      text.scrollTop = text.scrollHeight;
+    },
+    onFinal: (phrase) => {
+      transcript = `${transcript} ${phrase.trim()}`.trim();
+      text.textContent = transcript;
+      text.scrollTop = text.scrollHeight;
+    },
+    onEnd: () => finishRamble(),
+    onError: (error) => {
+      toast(`Diktat abgebrochen: ${error}`);
+      finishRamble();
+    },
+  });
+
+  try {
+    dictation.start();
+  } catch (error) {
+    toast(`Diktat konnte nicht starten: ${error.message}`);
+    return;
+  }
+
+  ramble = { dictation, get transcript() { return transcript; } };
+  live.hidden = false;
+  text.textContent = '';
+  button.textContent = '⏹ Fertig — Vorschlag anzeigen';
+  button.classList.add('recording');
+  toast(`Aufnahme läuft — ${modeLabel(status.mode)}`, 2000);
+}
+
+function stopRamble() {
+  ramble?.dictation.stop();
+}
+
+/** Called once the recogniser has actually ended, from stop or from an error. */
+function finishRamble() {
+  if (!ramble) return;
+  const transcript = ramble.transcript;
+  ramble = null;
+
+  const button = $('#btn-ramble');
+  if (button) {
+    button.textContent = '🎤 Einfach erzählen';
+    button.classList.remove('recording');
+  }
+  const live = $('#ramble-live');
+  if (live) live.hidden = true;
+
+  if (!transcript.trim()) {
+    toast('Nichts verstanden.');
+    return;
+  }
+  showRambleProposal(transcript);
+}
+
+function showRambleProposal(transcript) {
+  const result = parseDictation(transcript);
+  const rows = [];
+
+  for (const field of ['work', 'findings', 'parts']) {
+    if (result[field]) rows.push({ field, label: FIELD_LABELS[field], value: result[field] });
+  }
+  if (result.nextService) {
+    rows.push({ field: 'nextService', label: FIELD_LABELS.nextService, value: result.nextService, display: formatDate(result.nextService) });
+  }
+  if (result.kind) rows.push({ field: 'kind', label: 'Art', value: result.kind });
+  if (result.date) rows.push({ field: 'date', label: 'Datum', value: result.date, display: formatDate(result.date) });
+
+  $('#ramble-proposal').innerHTML = rows
+    .map(
+      (row, index) => `
+        <label class="proposal">
+          <input type="checkbox" checked data-index="${index}" />
+          <span>
+            <em>${esc(row.label)}</em>
+            ${escLines(row.display ?? row.value)}
+          </span>
+        </label>`
+    )
+    .join('');
+  $('#ramble-raw').querySelector('p').textContent = transcript;
+  $('#ramble-sheet').hidden = false;
+
+  $('#ramble-apply').onclick = () => {
+    const checked = [...$('#ramble-proposal').querySelectorAll('input:checked')].map(
+      (input) => rows[Number(input.dataset.index)]
+    );
+    for (const row of checked) applyProposal(row.field, row.value);
+    closeRambleSheet();
+    toast(checked.length ? `${checked.length} Feld(er) übernommen.` : 'Nichts übernommen.');
+  };
+
+  // The escape hatch for when the routing guessed wrong: keep every word,
+  // in one field, and let the technician move what belongs elsewhere.
+  $('#ramble-all-work').onclick = () => {
+    applyProposal('work', transcript.trim());
+    closeRambleSheet();
+    toast('Ganzer Text in «Ausgeführte Arbeiten».');
+  };
+}
+
+function closeRambleSheet() {
+  const sheet = $('#ramble-sheet');
+  if (sheet) sheet.hidden = true;
+}
+
+/** Proposals are appended, never overwritten — except the single-value fields. */
+function applyProposal(field, value) {
+  if (field === 'kind' || field === 'date' || field === 'nextService') {
+    const input = $(`#entry-form [name="${field}"]`);
+    if (input) input.value = value;
+  } else {
+    const area = $(`#entry-${field}`);
+    if (!area) return;
+    const existing = area.value.trim();
+    area.value = existing ? `${existing} ${value}` : value;
+  }
+  $('#entry-form')?.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function readDraft(assetId) {
@@ -910,7 +1095,10 @@ document.addEventListener('click', (event) => {
 });
 
 window.addEventListener('hashchange', route);
-window.addEventListener('pagehide', stopDictation);
+window.addEventListener('pagehide', () => {
+  stopDictation();
+  stopRamble();
+});
 await route();
 
 if ('serviceWorker' in navigator) {

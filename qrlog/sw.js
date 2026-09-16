@@ -6,7 +6,7 @@
  * Bump CACHE when shipping changed files — old caches are dropped on activate.
  */
 
-const CACHE = 'qrlog-v1';
+const CACHE = 'qrlog-v2';
 const SHELL = [
   './',
   './index.html',
@@ -18,6 +18,7 @@ const SHELL = [
   './js/qr.js',
   './js/scanner.js',
   './js/stt.js',
+  './js/parse.js',
   './vendor/qrcode.js',
   './vendor/jsQR.js',
 ];

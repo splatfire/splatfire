@@ -236,3 +236,44 @@ main:focus { outline: none; }
 @media (min-width: 640px) {
   .asset-qr { width: 72px; }
 }
+
+/* ---------- Ramble bar ---------- */
+
+/* Pinned to the bottom of the entry form: the technician talks once and the
+   parser proposes where each sentence goes. The form gets matching padding so
+   the bar never covers the save button. */
+#ramble-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+  display: flex; flex-direction: column; gap: 8px;
+  max-width: 720px; margin: 0 auto;
+}
+#ramble-bar button { width: 100%; }
+#ramble-live {
+  background: var(--surface); border: 1px solid var(--surface-2);
+  border-radius: var(--radius); padding: 10px 12px;
+  max-height: 32vh; overflow-y: auto;
+}
+#ramble-live p { margin: 0; }
+#ramble-text { margin-top: 6px !important; }
+#entry-form { padding-bottom: 96px; }
+
+.sheet { align-items: flex-end; background: rgb(0 0 0 / .6); }
+.sheet-body {
+  width: 100%; max-width: 720px; max-height: 88vh; overflow-y: auto;
+  background: var(--surface); border-radius: var(--radius) var(--radius) 0 0;
+  padding: var(--gap); padding-bottom: calc(var(--gap) + env(safe-area-inset-bottom));
+}
+.proposal {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--bg); border-radius: var(--radius);
+  padding: 12px; margin-bottom: 8px; color: var(--text);
+}
+.proposal input { width: 24px; height: 24px; min-height: 0; margin: 2px 0 0; flex: none; }
+.proposal em {
+  display: block; font-style: normal; color: var(--muted);
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px;
+}
+#ramble-raw { margin: 12px 0; color: var(--muted); font-size: .9rem; }
+#ramble-raw summary { cursor: pointer; padding: 8px 0; }
