@@ -120,3 +120,54 @@ test('unclassifiable speech all lands in work rather than being dropped', () => 
   assert.match(result.work, /nach dem Rechten/);
   assert.equal(result.findings, '');
 });
+
+/* ---------- Anlage master data ---------- */
+
+test('service interval from spoken frequency', async () => {
+  const { findInterval } = await import('./parse.js');
+  assert.equal(findInterval('Wartung jährlich'), 12);
+  assert.equal(findInterval('alle zwei Jahre'), 24);
+  assert.equal(findInterval('alle 6 Monate'), 6);
+  assert.equal(findInterval('halbjährlich prüfen'), 6);
+  assert.equal(findInterval('Serviceintervall 18 Monate'), 18);
+  assert.equal(findInterval('irgendwann mal'), null);
+});
+
+test('a spoken Anlage description fills the sheet', async () => {
+  const { parseAsset } = await import('./parse.js');
+  const result = parseAsset(
+    'Das ist eine Wärmepumpe im Technikraum UG. Hersteller ist Viessmann, Modell Vitocal 200, ' +
+      'Seriennummer 7842-113. Baujahr 2019. Wartung jährlich. Der Absperrhahn klemmt, ' +
+      'mit Gefühl schliessen.',
+    { today: TODAY }
+  );
+  assert.equal(result.type, 'Wärmepumpe');
+  assert.equal(result.manufacturer, 'Viessmann');
+  assert.equal(result.model, 'Vitocal 200');
+  assert.equal(result.serial, '7842-113');
+  assert.match(result.location, /Technikraum UG/i);
+  assert.equal(result.installedOn, '2019-01-01');
+  assert.equal(result.intervalMonths, 12);
+  assert.match(result.name, /Wärmepumpe/);
+  // The one sentence that is not a labelled value survives as a note.
+  assert.match(result.notes, /Absperrhahn/);
+  assert.doesNotMatch(result.notes, /Viessmann/);
+});
+
+test('a sparse description proposes only what was said', async () => {
+  const { parseAsset } = await import('./parse.js');
+  const result = parseAsset('Boiler im Keller.', { today: TODAY });
+  assert.equal(result.type, 'Boiler');
+  assert.match(result.location, /Keller/i);
+  assert.equal(result.manufacturer, '');
+  assert.equal(result.serial, '');
+  assert.equal(result.installedOn, '');
+  assert.equal(result.intervalMonths, null);
+});
+
+test('a hesitation after a label cue leaves the field empty', async () => {
+  const { parseAsset } = await import('./parse.js');
+  const result = parseAsset('Hersteller, ähm, weiss ich gerade nicht.', { today: TODAY });
+  assert.equal(result.manufacturer, '');
+  assert.equal(result.type, '');
+});

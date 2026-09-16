@@ -28,15 +28,28 @@ Code and comments are English, like the rest of this repo.
 - **Export / import** — one JSON file with photos inlined, to move data to
   another device or keep a backup.
 
-## The ramble bar
+## One microphone for the whole form
 
-A technician does not dictate field by field. The bar pinned to the bottom of
-the entry form takes one long take — *"Also heute Jahreswartung gemacht, Filter
+A technician does not dictate field by field, so there is one button — bottom
+right, thumb-reachable — not one per field. It appears on both forms: the
+logbook entry and the Anlage sheet. It opens a text box; talk or type into it,
+then *"Felder ausfüllen"* proposes where each part goes.
+
+Getting the text and sorting it are separate steps on purpose, because how you
+get text differs per platform and the sorting does not:
+
+| Platform | How the text gets in |
+| --- | --- |
+| iPhone / iPad | the **keyboard's own microphone** — on-device, works in flight mode |
+| Chromium with an on-device language pack | the in-page recorder, or the keyboard |
+| anything else | typing |
+
+On the entry form it takes one long take — *"Also heute Jahreswartung gemacht, Filter
 gewechselt, Soledruck war eins komma vier bar, die Umwälzpumpe läuft unruhig,
 verbaut habe ich einen Solefilter, nächster Service in einem Jahr"* — and
 proposes where each sentence belongs:
 
-| Field | Gets |
+| Entry field | Gets |
 | --- | --- |
 | Ausgeführte Arbeiten | everything not claimed by another field |
 | Befund / Zustand | sentences about condition: *unruhig, undicht, beobachten, muss ersetzt* |
@@ -46,6 +59,12 @@ proposes where each sentence belongs:
 
 It also rewrites spoken decimals, so *"eins komma vier bar"* is stored as
 `1.4 bar` and stays searchable.
+
+On the Anlage sheet it reads labelled values instead — *"Wärmepumpe im
+Technikraum UG, Hersteller Viessmann, Modell Vitocal 200, Seriennummer
+7842-113, Baujahr 2019, Wartung jährlich"* fills type, location, manufacturer,
+model, serial, commissioning date and service interval, and keeps whatever it
+could not place as notes.
 
 **This is a rule-based German parser, not a language model.** It runs entirely
 on the device, which is the whole point — but it gets unusual phrasing wrong.
@@ -70,9 +89,17 @@ of them is actually on-device:
 
 | Mode | Audio leaves the device | Works with no signal |
 | --- | --- | --- |
+| The phone keyboard's own microphone | no (on-device languages) | yes |
 | On-device Web Speech (`processLocally = true`) | no | yes, once the language pack is installed |
 | Classic Web Speech API | yes — Chrome to Google, Safari to Apple | no |
 | Typing | no | yes |
+
+**On iPhone and iPad there is no on-device speech API on the web at all.**
+Safari's `webkitSpeechRecognition` routes audio to Apple's servers, so with
+"on-device only" on — the default — the in-page recorder correctly refuses, and
+the sheet points at the keyboard microphone instead. That one is Apple's own
+on-device dictation: for installed languages it runs on the phone and works in
+flight mode, and it types straight into the box.
 
 The app prefers the first, and **never silently falls back to the second**. The
 *"Nur Diktat auf dem Gerät zulassen"* setting is on by default; with it on, the

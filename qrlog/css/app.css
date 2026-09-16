@@ -155,20 +155,6 @@ main:focus { outline: none; }
 .entry-detail span { display: block; color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
 .entry-detail p { margin: 2px 0 0; }
 
-/* ---------- Dictation ---------- */
-
-.dictate { position: relative; }
-.dictate textarea { padding-right: 64px; }
-.mic {
-  position: absolute; top: 12px; right: 8px;
-  width: 48px; height: 48px; min-height: 48px; padding: 0;
-  border-radius: 50%; font-size: 1.2rem;
-  background: var(--surface-2);
-}
-.mic.recording { background: var(--danger); color: #450a0a; animation: pulse 1.4s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: .55; } }
-.interim { display: block; color: var(--accent); font-style: italic; min-height: 1.2em; font-size: .9rem; }
-
 /* ---------- Photos ---------- */
 
 .photo-block { margin-bottom: var(--gap); }
@@ -237,34 +223,31 @@ main:focus { outline: none; }
   .asset-qr { width: 72px; }
 }
 
-/* ---------- Ramble bar ---------- */
+/* ---------- One microphone for the whole form ---------- */
 
-/* Pinned to the bottom of the entry form: the technician talks once and the
-   parser proposes where each sentence goes. The form gets matching padding so
-   the bar never covers the save button. */
-#ramble-bar {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, var(--bg) 70%, transparent);
-  display: flex; flex-direction: column; gap: 8px;
-  max-width: 720px; margin: 0 auto;
+/* Bottom right, thumb-sized: the technician is holding the phone one-handed
+   and the other hand is on the installation. */
+.fab {
+  position: fixed; right: 16px; z-index: 30;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  width: 68px; height: 68px; min-height: 0; padding: 0;
+  border-radius: 50%; font-size: 1.8rem;
+  background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 8px 24px rgb(0 0 0 / .5);
 }
-#ramble-bar button { width: 100%; }
-#ramble-live {
-  background: var(--surface); border: 1px solid var(--surface-2);
-  border-radius: var(--radius); padding: 10px 12px;
-  max-height: 32vh; overflow-y: auto;
-}
-#ramble-live p { margin: 0; }
-#ramble-text { margin-top: 6px !important; }
-#entry-form { padding-bottom: 96px; }
+.fab:hover { background: #7dd3fc; }
+#entry-form, #asset-form { padding-bottom: 88px; }
 
 .sheet { align-items: flex-end; background: rgb(0 0 0 / .6); }
 .sheet-body {
-  width: 100%; max-width: 720px; max-height: 88vh; overflow-y: auto;
+  width: 100%; max-width: 720px; max-height: 92vh; overflow-y: auto;
   background: var(--surface); border-radius: var(--radius) var(--radius) 0 0;
-  padding: var(--gap); padding-bottom: calc(var(--gap) + env(safe-area-inset-bottom));
+  padding: var(--gap); padding-bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
 }
+#ramble-input { min-height: 34vh; font-size: 1.05rem; }
+#ramble-record.recording { background: var(--danger); color: #450a0a; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .55; } }
+
 .proposal {
   display: flex; gap: 12px; align-items: flex-start;
   background: var(--bg); border-radius: var(--radius);
@@ -277,3 +260,4 @@ main:focus { outline: none; }
 }
 #ramble-raw { margin: 12px 0; color: var(--muted); font-size: .9rem; }
 #ramble-raw summary { cursor: pointer; padding: 8px 0; }
+.interim { color: var(--accent); font-style: italic; min-height: 1.2em; font-size: .9rem; margin: 4px 0; }
