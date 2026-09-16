@@ -39,6 +39,41 @@
     </div>
   </div>
 
+  <!-- One microphone for the whole form, reachable with the thumb. -->
+  <button id="btn-ramble" class="fab" hidden aria-label="Alle Felder diktieren">🎤</button>
+
+  <div id="ramble-sheet" class="overlay sheet" hidden>
+    <div class="sheet-body">
+      <section id="ramble-step-input">
+        <h1 id="ramble-title">Einfach erzählen</h1>
+        <p class="muted" id="ramble-hint"></p>
+        <textarea id="ramble-input" rows="7" placeholder="Sprechen oder tippen …"></textarea>
+        <p class="interim" id="ramble-interim" aria-live="polite"></p>
+        <p class="muted" id="ramble-mode"></p>
+        <div class="row">
+          <button type="button" id="ramble-record" hidden>🎤 Aufnahme starten</button>
+        </div>
+        <div class="row">
+          <button type="button" id="ramble-analyze" class="primary big">Felder ausfüllen</button>
+          <button type="button" id="ramble-cancel">Abbrechen</button>
+        </div>
+      </section>
+
+      <section id="ramble-step-proposal" hidden>
+        <h1>Vorschlag</h1>
+        <p class="muted">Übernommen wird nur, was angehakt ist.</p>
+        <div id="ramble-proposal"></div>
+        <details id="ramble-raw"><summary>Gesagter Text</summary><p></p></details>
+        <div class="row">
+          <button type="button" id="ramble-apply" class="primary big">Übernehmen</button>
+          <button type="button" id="ramble-all-text">Alles in ein Feld</button>
+          <button type="button" id="ramble-back">Zurück zum Text</button>
+          <button type="button" id="ramble-discard">Verwerfen</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
   <div id="toast" role="status" aria-live="polite" hidden></div>
 
   <input id="file-import" type="file" accept="application/json,.json" hidden />

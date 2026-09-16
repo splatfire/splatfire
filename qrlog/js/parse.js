@@ -288,3 +288,162 @@ export const FIELD_LABELS = {
   parts: 'Verbautes Material',
   nextService: 'Nächster Service',
 };
+
+/* ---------- Anlage master data ---------- */
+
+/** Things a Gebäudetechnik technician stands in front of. */
+const ASSET_TYPES = [
+  'sole/wasser-wärmepumpe', 'luft/wasser-wärmepumpe', 'wärmepumpe', 'gasheizung',
+  'ölheizung', 'pelletheizung', 'holzheizung', 'fernwärme', 'heizkessel', 'kessel',
+  'brenner', 'boiler', 'wassererwärmer', 'wärmespeicher', 'lüftungsanlage', 'lüftung',
+  'komfortlüftung', 'klimaanlage', 'kältemaschine', 'rückkühler', 'solaranlage',
+  'photovoltaik', 'pv-anlage', 'umwälzpumpe', 'unterverteilung', 'notstromaggregat',
+  'hebeanlage', 'enthärtungsanlage', 'druckerhöhungsanlage', 'brandmeldeanlage',
+];
+
+/** Cue words that introduce a value, longest first so "typenbezeichnung" beats "typ". */
+const LABELLED_FIELDS = {
+  manufacturer: ['hersteller', 'fabrikat', 'marke'],
+  model: ['typenbezeichnung', 'modellbezeichnung', 'baureihe', 'modell', 'typ'],
+  serial: ['fabrikationsnummer', 'seriennummer', 'gerätenummer', 'geraetenummer', 'serial'],
+  location: ['standort', 'befindet sich im', 'befindet sich in', 'steht im', 'steht in', 'montiert im'],
+};
+
+/** Words that end a dictated value — "Hersteller Viessmann Modell Vitocal". */
+const VALUE_STOPPERS = [
+  ...Object.values(LABELLED_FIELDS).flat(),
+  'baujahr', 'in betrieb', 'serviceintervall', 'wartungsintervall', 'alle',
+];
+
+/**
+ * Pull the value that follows a cue word, up to the next cue word or clause end.
+ * "Hersteller ist Viessmann, Modell Vitocal 200" -> "Viessmann".
+ */
+function valueAfter(text, cues) {
+  const lower = text.toLowerCase();
+  for (const cue of cues) {
+    const at = lower.indexOf(cue);
+    if (at === -1) continue;
+    let rest = text.slice(at + cue.length);
+    rest = rest.replace(/^[\s:,-]*(?:ist|sind|wäre|waere)?\s*(?:der|die|das|ein|eine)?\s*/i, '');
+    const cut = rest.split(/[,.;]/)[0];
+    const stop = VALUE_STOPPERS.map((s) => cut.toLowerCase().indexOf(s)).filter((i) => i > 0);
+    const value = (stop.length ? cut.slice(0, Math.min(...stop)) : cut)
+      .replace(FILLERS, '')
+      .trim();
+    // "Hersteller, ähm, weiss ich nicht" must leave the field empty rather than
+    // filling it with a hesitation.
+    if (value && !FILLERS.test(`${value} `)) return value;
+  }
+  return '';
+}
+
+/** How often the thing wants seeing: "alle zwei Jahre", "jährlich", "alle 6 Monate". */
+export function findInterval(text) {
+  const lower = text.toLowerCase();
+  if (/\bhalbjährlich\b|\bhalbjaehrlich\b/.test(lower)) return 6;
+  if (/\bvierteljährlich\b|\bvierteljaehrlich\b|\bquartal\b/.test(lower)) return 3;
+  if (/\bjährlich\b|\bjaehrlich\b|\bjedes jahr\b/.test(lower)) return 12;
+  if (/\bmonatlich\b/.test(lower)) return 1;
+
+  const words = Object.keys(NUMBER_WORDS).join('|');
+  const every = lower.match(
+    new RegExp(`\\ball[e]?\\s+(\\d+|${words})\\s+(jahr(?:en?)?|monat(?:en?)?)\\b`, 'i')
+  );
+  if (every) {
+    const n = Number(toNumber(every[1]));
+    if (!Number.isFinite(n)) return null;
+    return every[2].startsWith('jahr') ? n * 12 : n;
+  }
+
+  const named = lower.match(
+    new RegExp(`(?:service|wartungs)intervall\\D{0,12}(\\d+|${words})\\s*(jahr(?:en?)?|monat(?:en?)?)?`, 'i')
+  );
+  if (named) {
+    const n = Number(toNumber(named[1]));
+    if (!Number.isFinite(n)) return null;
+    return named[2] && named[2].startsWith('jahr') ? n * 12 : n;
+  }
+  return null;
+}
+
+/**
+ * Parse a spoken description of an installation into the Anlage sheet.
+ *
+ * Unlike a logbook entry this is mostly labelled values — "Hersteller Viessmann,
+ * Seriennummer 2024-88213, Baujahr 2019" — so it reads cue words rather than
+ * routing whole sentences, and anything it cannot place is kept as notes.
+ */
+export function parseAsset(transcript, { today = new Date() } = {}) {
+  const text = String(transcript || '').trim();
+  const lower = text.toLowerCase();
+
+  const manufacturer = valueAfter(text, LABELLED_FIELDS.manufacturer);
+  const model = valueAfter(text, LABELLED_FIELDS.model);
+  const serial = valueAfter(text, LABELLED_FIELDS.serial).replace(/\s+/g, '');
+  let location = valueAfter(text, LABELLED_FIELDS.location);
+
+  // Rooms are often named without any cue: "die Wärmepumpe im Technikraum UG".
+  if (!location) {
+    const room = text.match(
+      /\b(?:im|in der|in den)\s+((?:unter|ober|dach)?geschoss|technikraum|heizraum|keller\w*|estrich|dachstock|maschinenraum|garage|waschküche|waschkueche)\b[^,.;]*/i
+    );
+    if (room) location = room[0].replace(/^\s*(?:im|in der|in den)\s+/i, '').trim();
+  }
+
+  const type = ASSET_TYPES.find((candidate) => lower.includes(candidate)) ?? '';
+  const titleCase = (s) => s.replace(/(^|[\s/-])(\p{Ll})/gu, (_, sep, ch) => sep + ch.toUpperCase());
+
+  const year = lower.match(/\b(?:baujahr|jahrgang)\D{0,6}(\d{4})\b/);
+  const installedOn = year
+    ? `${year[1]}-01-01`
+    : (/\bin betrieb\b|\binstalliert\b|\bmontiert\b/.test(lower) ? findDate(text, today) : null);
+
+  const found = { manufacturer, model, serial, location, type, installedOn };
+  const notes = splitSentences(text)
+    .filter((sentence) => !describesOnly(sentence, found))
+    .join(' ');
+
+  return {
+    name: type ? titleCase([type, location].filter(Boolean).join(' ')) : '',
+    type: type ? titleCase(type) : '',
+    location,
+    manufacturer,
+    model,
+    serial,
+    installedOn: installedOn ?? '',
+    intervalMonths: findInterval(text),
+    notes,
+  };
+}
+
+/**
+ * True when a sentence carried nothing but values already extracted, so it
+ * would only repeat itself in the notes.
+ */
+function describesOnly(sentence, found) {
+  let rest = sentence;
+  for (const value of Object.values(found)) {
+    if (value) rest = rest.replace(new RegExp(escapeRegex(String(value)), 'gi'), ' ');
+  }
+  for (const cue of [...VALUE_STOPPERS, 'ist', 'sind', 'der', 'die', 'das', 'ein', 'eine', 'im', 'in', 'und']) {
+    rest = rest.replace(new RegExp(`\\b${escapeRegex(cue)}\\b`, 'gi'), ' ');
+  }
+  return rest.replace(/[\s\d.,;:/-]/g, '').length < 4;
+}
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export const ASSET_FIELD_LABELS = {
+  name: 'Bezeichnung',
+  type: 'Anlagetyp',
+  location: 'Standort',
+  manufacturer: 'Hersteller',
+  model: 'Modell',
+  serial: 'Seriennummer',
+  installedOn: 'In Betrieb seit',
+  intervalMonths: 'Serviceintervall (Monate)',
+  notes: 'Notizen',
+};

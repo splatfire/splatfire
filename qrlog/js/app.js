@@ -17,7 +17,7 @@ import {
   probe, installOnDevice, Dictation, modeLabel, isSupported,
   probeIsBlocked, resetProbeBlock,
 } from './stt.js';
-import { parseDictation, FIELD_LABELS } from './parse.js';
+import { parseDictation, parseAsset, FIELD_LABELS, ASSET_FIELD_LABELS } from './parse.js';
 
 const $ = (sel) => document.querySelector(sel);
 const view = $('#view');
@@ -73,77 +73,7 @@ function addMonths(iso, months) {
   return date.toISOString().slice(0, 10);
 }
 
-/* ---------- Dictation wiring ---------- */
-
-let activeDictation = null;
-
-function stopDictation() {
-  activeDictation?.dictation.stop();
-}
-
-/**
- * Wire every `<button data-mic="fieldId">` in the current view to the field it
- * names. Final phrases are appended to what is already there, so dictating and
- * typing mix freely.
- */
-function setupDictation(root) {
-  for (const button of root.querySelectorAll('[data-mic]')) {
-    button.addEventListener('click', () => toggleMic(button));
-  }
-}
-
-async function toggleMic(button) {
-  if (activeDictation?.button === button) {
-    stopDictation();
-    return;
-  }
-  stopDictation();
-
-  const field = document.getElementById(button.dataset.mic);
-  if (!field) return;
-
-  const status = await probe(settings.lang, { offlineOnly: settings.offlineDictationOnly });
-  if (status.mode === 'none') {
-    toast(dictationBlockedReason(status));
-    return;
-  }
-
-  const interimEl = field.parentElement.querySelector('.interim');
-  const dictation = new Dictation({
-    lang: settings.lang,
-    onDevice: status.mode === 'on-device',
-    onInterim: (text) => {
-      if (interimEl) interimEl.textContent = text;
-    },
-    onFinal: (text) => {
-      const phrase = text.trim();
-      if (!phrase) return;
-      const needsSpace = field.value && !/\s$/.test(field.value);
-      field.value += (needsSpace ? ' ' : '') + phrase;
-      field.dispatchEvent(new Event('input', { bubbles: true }));
-      if (interimEl) interimEl.textContent = '';
-      field.scrollTop = field.scrollHeight;
-    },
-    onEnd: () => {
-      button.classList.remove('recording');
-      button.textContent = '🎤';
-      if (interimEl) interimEl.textContent = '';
-      if (activeDictation?.button === button) activeDictation = null;
-    },
-    onError: (error) => toast(`Diktat abgebrochen: ${error}`),
-  });
-
-  try {
-    dictation.start();
-  } catch (error) {
-    toast(`Diktat konnte nicht starten: ${error.message}`);
-    return;
-  }
-  activeDictation = { button, dictation };
-  button.classList.add('recording');
-  button.textContent = '⏹';
-  toast(`Diktat läuft — ${modeLabel(status.mode)}`, 2000);
-}
+/* ---------- Dictation ---------- */
 
 function dictationBlockedReason(status) {
   if (!isSupported()) return 'Dieser Browser kennt keine Spracherkennung. Bitte tippen.';
@@ -215,6 +145,9 @@ function parseRoute() {
   return { name: 'list' };
 }
 
+/** The two routes that have a form worth dictating into. */
+const RAMBLE_ROUTES = { entry: 'entry', 'asset-edit': 'asset' };
+
 const ROUTES = {
   list: renderList,
   asset: (route) => renderAsset(route.id),
@@ -225,9 +158,7 @@ const ROUTES = {
 };
 
 async function route() {
-  stopDictation();
-  stopRamble();
-  closeRambleSheet();
+  closeRamble();
   releasePhotoUrls();
   $('#menu').hidden = true;
   $('#btn-menu').setAttribute('aria-expanded', 'false');
@@ -238,7 +169,7 @@ async function route() {
     console.error(error);
     view.innerHTML = `<section class="card"><h1>Fehler</h1><p>${esc(error.message)}</p></section>`;
   }
-  setupDictation(view);
+  showRambleFab(RAMBLE_ROUTES[current.name] ?? null);
   view.focus({ preventScroll: true });
   window.scrollTo(0, 0);
 }
@@ -423,11 +354,7 @@ async function renderAssetEdit(id) {
       ${field('installedOn', 'In Betrieb seit', 'date')}
       ${field('intervalMonths', 'Serviceintervall (Monate)', 'number')}
       <label>Notizen — was ist das für eine Anlage, was muss man wissen?
-        <div class="dictate">
-          <textarea id="asset-notes" name="notes" rows="5">${esc(asset.notes)}</textarea>
-          <button type="button" class="mic" data-mic="asset-notes" aria-label="Diktieren">🎤</button>
-        </div>
-        <span class="interim"></span>
+        <textarea id="asset-notes" name="notes" rows="5">${esc(asset.notes)}</textarea>
       </label>
 
       <div class="photo-block">
@@ -474,7 +401,7 @@ async function renderAssetEdit(id) {
 
   $('#asset-form').onsubmit = async (event) => {
     event.preventDefault();
-    stopDictation();
+    closeRamble();
     const form = new FormData(event.target);
     const updated = { ...asset, photos };
     for (const [key, value] of form.entries()) updated[key] = value;
@@ -508,11 +435,7 @@ async function renderEntry(assetId, entryId) {
       <p class="muted">${esc(asset.name || assetId)}</p>
 
       <label class="hero">Was wurde heute gemacht?
-        <div class="dictate">
-          <textarea id="entry-work" name="work" rows="7" placeholder="Filter ersetzt, Vordruck auf 1.4 bar ergänzt, Umwälzpumpe lief unruhig — beobachten."></textarea>
-          <button type="button" class="mic" data-mic="entry-work" aria-label="Diktieren">🎤</button>
-        </div>
-        <span class="interim"></span>
+        <textarea id="entry-work" name="work" rows="7" placeholder="Filter ersetzt, Vordruck auf 1.4 bar ergänzt, Umwälzpumpe lief unruhig — beobachten."></textarea>
       </label>
 
       <div class="grid-2">
@@ -527,19 +450,11 @@ async function renderEntry(assetId, entryId) {
       </div>
 
       <label>Befund / Zustand der Anlage
-        <div class="dictate">
-          <textarea id="entry-findings" name="findings" rows="3"></textarea>
-          <button type="button" class="mic" data-mic="entry-findings" aria-label="Diktieren">🎤</button>
-        </div>
-        <span class="interim"></span>
+        <textarea id="entry-findings" name="findings" rows="3"></textarea>
       </label>
 
       <label>Verbautes Material
-        <div class="dictate">
-          <textarea id="entry-parts" name="parts" rows="2"></textarea>
-          <button type="button" class="mic" data-mic="entry-parts" aria-label="Diktieren">🎤</button>
-        </div>
-        <span class="interim"></span>
+        <textarea id="entry-parts" name="parts" rows="2"></textarea>
       </label>
 
       <label>Nächster Service
@@ -558,29 +473,7 @@ async function renderEntry(assetId, entryId) {
         ${existing ? '<button type="button" id="btn-delete-entry" class="danger">Eintrag löschen</button>' : ''}
       </div>
       <p class="muted" id="draft-note"></p>
-    </form>
-
-    <div id="ramble-bar">
-      <div id="ramble-live" hidden>
-        <p class="muted">Einfach erzählen: was gemacht, was aufgefallen, was verbaut, wann wieder.</p>
-        <p id="ramble-text"></p>
-      </div>
-      <button type="button" id="btn-ramble" class="primary big">🎤 Einfach erzählen</button>
-    </div>
-
-    <div id="ramble-sheet" class="overlay sheet" hidden>
-      <div class="sheet-body">
-        <h1>Vorschlag</h1>
-        <p class="muted">Übernommen wird nur, was angehakt ist.</p>
-        <div id="ramble-proposal"></div>
-        <details id="ramble-raw"><summary>Gesagter Text</summary><p></p></details>
-        <div class="row">
-          <button type="button" id="ramble-apply" class="primary">Übernehmen</button>
-          <button type="button" id="ramble-all-work">Alles in «Arbeiten»</button>
-          <button type="button" id="ramble-discard">Verwerfen</button>
-        </div>
-      </div>
-    </div>`;
+    </form>`;
 
   // Textareas are filled after render so user text is never parsed as markup.
   $('#entry-work').value = entry.work ?? '';
@@ -628,12 +521,9 @@ async function renderEntry(assetId, entryId) {
     };
   }
 
-  setupRamble();
-
   form.onsubmit = async (event) => {
     event.preventDefault();
-    stopDictation();
-    stopRamble();
+    closeRamble();
     const data = Object.fromEntries(new FormData(form).entries());
     const saved = { ...entry, ...data, assetId, photos };
     if (!saved.work.trim() && !saved.findings.trim()) {
@@ -653,56 +543,107 @@ async function renderEntry(assetId, entryId) {
   };
 }
 
-/* ---------- Ramble: one dictation, sorted into the fields ---------- */
+/* ---------- One microphone for the whole form ---------- */
 
 /**
- * The bar pinned to the bottom of the entry form. A technician holds it down
- * and talks once — what they did, what they noticed, what they fitted, when
- * they will be back — and the parser proposes where each sentence belongs.
+ * A technician does not dictate field by field, so there is one button, not one
+ * per field: talk (or type) once, and the parser proposes where each part goes.
  *
- * Nothing is written into the form until the proposal is confirmed: the parser
- * is a set of German rules, not a mind reader, and silently rewriting someone's
- * service record would be worse than making them type it.
+ * Getting the text and sorting it are deliberately separate steps, because how
+ * you get text differs per platform and the sorting does not:
+ *
+ *   - iPhone/iPad: there is no on-device speech API on the web at all, and
+ *     Safari's Web Speech sends audio to Apple. The system keyboard's own
+ *     microphone does not — it is on-device for installed languages and works
+ *     in flight mode. So the sheet opens a focused text box and the keyboard
+ *     mic fills it.
+ *   - Chromium with an on-device language pack: the in-page recorder is offered
+ *     as well, which streams straight into the same box.
+ *   - Anywhere else: type. Same box, same parsing.
+ *
+ * Nothing is written into the form until the proposal is confirmed.
  */
-let ramble = null;
+let recorder = null;
+let rambleKind = 'entry';
+let rambleRows = [];
 
-function setupRamble() {
-  const button = $('#btn-ramble');
-  if (!button) return;
-  button.onclick = () => (ramble ? stopRamble() : startRamble());
-  $('#ramble-discard').onclick = closeRambleSheet;
+function stopRecording() {
+  recorder?.stop();
 }
 
-async function startRamble() {
+function showRambleFab(kind) {
+  const fab = $('#btn-ramble');
+  fab.hidden = kind === null;
+  if (kind) rambleKind = kind;
+}
+
+function openRamble() {
+  const isEntry = rambleKind === 'entry';
+  $('#ramble-title').textContent = isEntry ? 'Einfach erzählen' : 'Anlage beschreiben';
+  $('#ramble-hint').textContent = isEntry
+    ? 'Was gemacht, was aufgefallen, was verbaut, wann wieder — in einem Zug.'
+    : 'Was für eine Anlage, wo, Hersteller, Modell, Seriennummer, Baujahr, Intervall.';
+  $('#ramble-input').value = '';
+  $('#ramble-step-input').hidden = false;
+  $('#ramble-step-proposal').hidden = true;
+  $('#ramble-sheet').hidden = false;
+  $('#ramble-input').focus();
+  offerRecorder();
+}
+
+/**
+ * Show the in-page recorder only where it can run under the user's own rules.
+ * On iOS this stays hidden and the hint points at the keyboard microphone,
+ * which is the honest on-device path there.
+ */
+async function offerRecorder() {
+  const button = $('#ramble-record');
+  const note = $('#ramble-mode');
+  button.hidden = true;
+  // Lead with what works. On an iPhone the keyboard microphone is the answer,
+  // so saying "no dictation available" first would be both wrong and useless.
+  note.textContent = 'Mikrofon auf der Tastatur benutzen — das läuft auf dem Gerät.';
+
   const status = await probe(settings.lang, { offlineOnly: settings.offlineDictationOnly });
   if (status.mode === 'none') {
-    toast(dictationBlockedReason(status));
+    note.textContent =
+      'Mikrofon auf der Tastatur benutzen — das läuft auf dem Gerät. ' +
+      `Aufnahme direkt in der Seite geht hier nicht: ${dictationBlockedReason(status)}`;
     return;
   }
+  button.hidden = false;
+  button.textContent = '🎤 Aufnahme starten';
+  note.textContent = `Aufnahme in dieser Seite: ${modeLabel(status.mode)}. Oder Tastatur-Mikrofon.`;
+  button.onclick = () => (recorder ? stopRecording() : startRecording(status));
+}
 
-  stopDictation(); // Only one microphone.
-  const button = $('#btn-ramble');
-  const live = $('#ramble-live');
-  const text = $('#ramble-text');
-  let transcript = '';
+function startRecording(status) {
+  const box = $('#ramble-input');
+  const interimLine = $('#ramble-interim');
+  const button = $('#ramble-record');
 
   const dictation = new Dictation({
     lang: settings.lang,
     onDevice: status.mode === 'on-device',
+    // The half-recognised phrase goes on its own line rather than into the box:
+    // writing it into the box would overwrite both the finals already committed
+    // and anything typed by hand while the microphone is open.
     onInterim: (interim) => {
-      text.textContent = `${transcript} ${interim}`.trim();
-      text.scrollTop = text.scrollHeight;
+      interimLine.textContent = interim;
     },
     onFinal: (phrase) => {
-      transcript = `${transcript} ${phrase.trim()}`.trim();
-      text.textContent = transcript;
-      text.scrollTop = text.scrollHeight;
+      const committed = box.value.replace(/\s+$/, '');
+      box.value = committed ? `${committed} ${phrase.trim()}` : phrase.trim();
+      interimLine.textContent = '';
+      box.scrollTop = box.scrollHeight;
     },
-    onEnd: () => finishRamble(),
-    onError: (error) => {
-      toast(`Diktat abgebrochen: ${error}`);
-      finishRamble();
+    onEnd: () => {
+      recorder = null;
+      interimLine.textContent = '';
+      button.textContent = '🎤 Aufnahme starten';
+      button.classList.remove('recording');
     },
+    onError: (error) => toast(`Diktat abgebrochen: ${error}`),
   });
 
   try {
@@ -711,58 +652,36 @@ async function startRamble() {
     toast(`Diktat konnte nicht starten: ${error.message}`);
     return;
   }
-
-  ramble = { dictation, get transcript() { return transcript; } };
-  live.hidden = false;
-  text.textContent = '';
-  button.textContent = '⏹ Fertig — Vorschlag anzeigen';
+  recorder = dictation;
+  button.textContent = '⏹ Aufnahme beenden';
   button.classList.add('recording');
-  toast(`Aufnahme läuft — ${modeLabel(status.mode)}`, 2000);
 }
 
-function stopRamble() {
-  ramble?.dictation.stop();
+function closeRamble() {
+  stopRecording();
+  const sheet = $('#ramble-sheet');
+  if (sheet) sheet.hidden = true;
 }
 
-/** Called once the recogniser has actually ended, from stop or from an error. */
-function finishRamble() {
-  if (!ramble) return;
-  const transcript = ramble.transcript;
-  ramble = null;
-
-  const button = $('#btn-ramble');
-  if (button) {
-    button.textContent = '🎤 Einfach erzählen';
-    button.classList.remove('recording');
-  }
-  const live = $('#ramble-live');
-  if (live) live.hidden = true;
-
-  if (!transcript.trim()) {
-    toast('Nichts verstanden.');
+/** Build the proposal rows for whichever form is open. */
+function analyzeRamble() {
+  stopRecording();
+  const transcript = $('#ramble-input').value.trim();
+  if (!transcript) {
+    toast('Erst etwas sagen oder tippen.');
     return;
   }
-  showRambleProposal(transcript);
-}
 
-function showRambleProposal(transcript) {
-  const result = parseDictation(transcript);
-  const rows = [];
-
-  for (const field of ['work', 'findings', 'parts']) {
-    if (result[field]) rows.push({ field, label: FIELD_LABELS[field], value: result[field] });
+  rambleRows = rambleKind === 'entry' ? entryRows(transcript) : assetRows(transcript);
+  if (!rambleRows.length) {
+    toast('Nichts zuzuordnen — «Alles in Notizen» oder von Hand tippen.');
   }
-  if (result.nextService) {
-    rows.push({ field: 'nextService', label: FIELD_LABELS.nextService, value: result.nextService, display: formatDate(result.nextService) });
-  }
-  if (result.kind) rows.push({ field: 'kind', label: 'Art', value: result.kind });
-  if (result.date) rows.push({ field: 'date', label: 'Datum', value: result.date, display: formatDate(result.date) });
 
-  $('#ramble-proposal').innerHTML = rows
+  $('#ramble-proposal').innerHTML = rambleRows
     .map(
       (row, index) => `
         <label class="proposal">
-          <input type="checkbox" checked data-index="${index}" />
+          <input type="checkbox" checked data-index="${index}" id="proposal-${index}" />
           <span>
             <em>${esc(row.label)}</em>
             ${escLines(row.display ?? row.value)}
@@ -771,44 +690,86 @@ function showRambleProposal(transcript) {
     )
     .join('');
   $('#ramble-raw').querySelector('p').textContent = transcript;
-  $('#ramble-sheet').hidden = false;
-
-  $('#ramble-apply').onclick = () => {
-    const checked = [...$('#ramble-proposal').querySelectorAll('input:checked')].map(
-      (input) => rows[Number(input.dataset.index)]
-    );
-    for (const row of checked) applyProposal(row.field, row.value);
-    closeRambleSheet();
-    toast(checked.length ? `${checked.length} Feld(er) übernommen.` : 'Nichts übernommen.');
-  };
-
-  // The escape hatch for when the routing guessed wrong: keep every word,
-  // in one field, and let the technician move what belongs elsewhere.
-  $('#ramble-all-work').onclick = () => {
-    applyProposal('work', transcript.trim());
-    closeRambleSheet();
-    toast('Ganzer Text in «Ausgeführte Arbeiten».');
-  };
+  $('#ramble-step-input').hidden = true;
+  $('#ramble-step-proposal').hidden = false;
 }
 
-function closeRambleSheet() {
-  const sheet = $('#ramble-sheet');
-  if (sheet) sheet.hidden = true;
+function entryRows(transcript) {
+  const result = parseDictation(transcript);
+  const rows = [];
+  for (const field of ['work', 'findings', 'parts']) {
+    if (result[field]) rows.push({ field, label: FIELD_LABELS[field], value: result[field] });
+  }
+  if (result.nextService) {
+    rows.push({ field: 'nextService', label: FIELD_LABELS.nextService, value: result.nextService, display: formatDate(result.nextService) });
+  }
+  if (result.kind) rows.push({ field: 'kind', label: 'Art', value: result.kind });
+  if (result.date) rows.push({ field: 'date', label: 'Datum', value: result.date, display: formatDate(result.date) });
+  return rows;
 }
 
-/** Proposals are appended, never overwritten — except the single-value fields. */
+function assetRows(transcript) {
+  const result = parseAsset(transcript);
+  const rows = [];
+  for (const [field, label] of Object.entries(ASSET_FIELD_LABELS)) {
+    const value = result[field];
+    if (value === null || value === undefined || value === '') continue;
+    rows.push({
+      field,
+      label,
+      value: String(value),
+      display: field === 'installedOn' ? formatDate(value) : String(value),
+    });
+  }
+  return rows;
+}
+
+function applyRamble() {
+  const checked = [...$('#ramble-proposal').querySelectorAll('input:checked')].map(
+    (input) => rambleRows[Number(input.dataset.index)]
+  );
+  for (const row of checked) applyProposal(row.field, row.value);
+  closeRamble();
+  toast(checked.length ? `${checked.length} Feld(er) übernommen.` : 'Nichts übernommen.');
+}
+
+/**
+ * The escape hatch for when the routing guessed wrong: keep every word, in the
+ * form's free-text field, and let the technician move what belongs elsewhere.
+ */
+function applyRambleAsText() {
+  const transcript = $('#ramble-input').value.trim();
+  if (!transcript) return;
+  applyProposal(rambleKind === 'entry' ? 'work' : 'notes', transcript);
+  closeRamble();
+  toast(rambleKind === 'entry' ? 'Ganzer Text in «Arbeiten».' : 'Ganzer Text in «Notizen».');
+}
+
+/** Free text is appended; single-value fields are replaced. */
 function applyProposal(field, value) {
-  if (field === 'kind' || field === 'date' || field === 'nextService') {
-    const input = $(`#entry-form [name="${field}"]`);
-    if (input) input.value = value;
-  } else {
-    const area = $(`#entry-${field}`);
-    if (!area) return;
+  const form = $('#entry-form') ?? $('#asset-form');
+  if (!form) return;
+  const area = form.querySelector(`textarea[name="${field}"]`);
+  if (area) {
     const existing = area.value.trim();
     area.value = existing ? `${existing} ${value}` : value;
+  } else {
+    const input = form.querySelector(`[name="${field}"]`);
+    if (input) input.value = value;
   }
-  $('#entry-form')?.dispatchEvent(new Event('input', { bubbles: true }));
+  form.dispatchEvent(new Event('input', { bubbles: true }));
 }
+
+$('#btn-ramble').onclick = openRamble;
+$('#ramble-cancel').onclick = closeRamble;
+$('#ramble-discard').onclick = closeRamble;
+$('#ramble-analyze').onclick = analyzeRamble;
+$('#ramble-apply').onclick = applyRamble;
+$('#ramble-all-text').onclick = applyRambleAsText;
+$('#ramble-back').onclick = () => {
+  $('#ramble-step-proposal').hidden = true;
+  $('#ramble-step-input').hidden = false;
+};
 
 function readDraft(assetId) {
   try {
@@ -1095,10 +1056,7 @@ document.addEventListener('click', (event) => {
 });
 
 window.addEventListener('hashchange', route);
-window.addEventListener('pagehide', () => {
-  stopDictation();
-  stopRamble();
-});
+window.addEventListener('pagehide', stopRecording);
 await route();
 
 if ('serviceWorker' in navigator) {
