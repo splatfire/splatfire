@@ -71,3 +71,10 @@ vendored in `vendor/` and loaded via an import map — no build step,
    between rooms.
 6. **Share** — *Export* downloads the tour as a single file; *Import* opens it
    anywhere.
+
+## QR-Logbuch (`qrlog/`)
+
+A second, independent app in this repo: label an installation with a QR code,
+then keep every service visit in a logbook the next technician reads before
+touching anything. Like Splatfire it is a static, offline-first page — see
+[`qrlog/README.md`](qrlog/README.md).
