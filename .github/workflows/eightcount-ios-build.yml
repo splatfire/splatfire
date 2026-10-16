@@ -1,0 +1,211 @@
+# Compiles the EightCount iOS app on GitHub's macOS machines (free for
+# public repos), so build errors show up without a Mac. No signing: this
+# only checks that the code compiles. Installing on an iPhone still happens
+# in Xcode on your Mac (see eightcount/README.md).
+name: EightCount iOS build
+
+on:
+  push:
+    branches: [claude/nice-bardeen-84bg5p]
+    paths:
+      - "eightcount/**"
+      - ".github/workflows/eightcount-ios-build.yml"
+  workflow_dispatch:
+
+# A newer push cancels the build of an older one.
+concurrency:
+  group: eightcount-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Xcode 27 (GitHub image is in public preview).
+          - name: Xcode 27
+            runner: xcode-27
+          # Xcode 26 (default on macos-26), to make sure older setups build too.
+          - name: Xcode 26
+            runner: macos-26
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: eightcount
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version && swift --version
+
+      - name: Install XcodeGen
+        run: command -v xcodegen || brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for iPhone (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project EightCount.xcodeproj \
+            -scheme EightCount \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee build.log
+
+      - name: Error and warning summary
+        if: always()
+        run: |
+          echo "=== ERRORS ==="
+          grep -E "error:" build.log | sort -u || true
+          echo "=== WARNINGS (first 80) ==="
+          grep -E "warning:" build.log | sort -u | head -80 || true
+
+  # Runs eightcount/setup-mac.sh like on your Mac (minus the iPhone part,
+  # which needs your Apple ID and a cable).
+  setup-script:
+    name: setup-mac.sh (Xcode 27)
+    runs-on: xcode-27
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: eightcount
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run setup script (generate + compile check)
+        run: ./setup-mac.sh --no-open
+      - name: Install mode without Apple ID must stop with a clear message
+        run: |
+          set +e
+          ./setup-mac.sh --install --no-open > install.log 2>&1
+          code=$?
+          cat install.log | tail -15
+          test $code -ne 0 && grep -qE "No Apple Team found|No iPhone found" install.log
+      - name: Background refresh mode without an iPhone must stop quietly (exit 0)
+        run: |
+          set +e
+          printf 'SAVED_TEAM="ABCDE12345"\nSAVED_BUNDLE=""\n' > .eightcount-local
+          bash -x ./setup-mac.sh --refresh > refresh.log 2>&1; code=$?
+          echo "exit code: $code"
+          tail -60 refresh.log
+          test $code -eq 0 && grep -q "No iPhone found" refresh.log
+      - name: Auto-refresh agent file is valid
+        run: |
+          ./setup-mac.sh --auto-refresh || echo "(launchctl may not work on CI — checking the file)"
+          plutil -lint "$HOME/Library/LaunchAgents/io.github.splatfire.eightcount.refresh.plist"
+          ./setup-mac.sh --auto-refresh-off
+          test ! -e "$HOME/Library/LaunchAgents/io.github.splatfire.eightcount.refresh.plist"
+
+  # Runtime test: a UI test taps through the app in an iOS Simulator with a
+  # generated test video (practice, loop, notes, takes, compare, analysis).
+  # Screenshots: Actions run → Artifacts → ui-screenshots.
+  uitest:
+    name: UI test in Simulator (Xcode 27)
+    runs-on: xcode-27
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: eightcount
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          command -v xcodegen || brew install xcodegen
+          command -v ffmpeg || brew install ffmpeg
+
+      # Sound: a quiet tone plus a drum hit on every beat at 120 BPM, count 1
+      # at 0.5 s (louder every 4 beats) – the same tempo the demo project
+      # uses, so the UI test can check "Find the beat".
+      - name: Make a 20 s test video (portrait, test pattern + 120 BPM beat)
+        run: |
+          ffmpeg -loglevel error -y \
+            -f lavfi -i testsrc2=size=720x1280:rate=30 \
+            -f lavfi -i "aevalsrc='0.15*sin(2*PI*440*t)+gte(t,0.5)*(0.5+0.4*lt(mod(t-0.5,2),0.25))*exp(-30*mod(t-0.5,0.5))*sin(2*PI*90*t)':s=44100" \
+            -t 20 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest demo.mp4
+          ls -la demo.mp4
+
+      - name: Generate project and pick a simulator
+        run: |
+          xcodegen generate
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)["devices"]
+          for r in sorted((r for r in d if "iOS" in r), reverse=True):
+              for dev in d[r]:
+                  if dev["name"].startswith("iPhone"):
+                      print(dev["udid"]); sys.exit(0)
+          sys.exit(1)')
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl list devices | grep "$UDID"
+
+      - name: Boot the simulator (and wait until it is fully up)
+        run: |
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          sleep 20
+
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project EightCount.xcodeproj -scheme EightCount \
+            -destination "id=$UDID" -derivedDataPath build/test \
+            2>&1 | tee build-test.log | grep -E "error:|TEST BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "TEST BUILD SUCCEEDED" build-test.log
+
+      - name: Allow saving to Photos in the simulator (for the export test)
+        run: xcrun simctl privacy "$UDID" grant photos-add io.github.splatfire.eightcount || true
+
+      - name: Run UI test (one retry if the test runner fails to start)
+        run: |
+          mkdir -p shots
+          for attempt in 1 2; do
+            echo "=== Attempt $attempt"
+            TEST_RUNNER_SEED_VIDEO="$PWD/demo.mp4" TEST_RUNNER_SHOTS_DIR="$PWD/shots" \
+            xcodebuild test-without-building \
+              -project EightCount.xcodeproj -scheme EightCount \
+              -destination "id=$UDID" -derivedDataPath build/test \
+              -resultBundlePath "ui-$attempt.xcresult" \
+              > "test-$attempt.log" 2>&1 || true
+            grep -E "error:|Test Case|TEST (EXECUTE )?(SUCCEEDED|FAILED)|XCTAssert|Not found|crash|bootstrapping" "test-$attempt.log" || true
+            if grep -qE "TEST (EXECUTE )?SUCCEEDED" "test-$attempt.log"; then exit 0; fi
+            # Only retry when the runner never got to our test.
+            grep -q "bootstrapping" "test-$attempt.log" || exit 1
+            xcrun simctl shutdown "$UDID" || true
+            xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b; sleep 20
+          done
+          exit 1
+
+      - name: Crash reports (if any)
+        if: failure()
+        run: |
+          for f in $(ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i eightcount | head -2); do
+            echo "=== $f"; head -150 ~/Library/Logs/DiagnosticReports/"$f"
+          done
+
+      - name: Print screenshots (small, base64) for remote review
+        if: always()
+        run: |
+          for f in shots/*.png; do
+            [ -e "$f" ] || continue
+            sips -Z 420 -s format jpeg -s formatOptions 35 "$f" --out small.jpg >/dev/null
+            echo "SHOT_BEGIN $(basename "$f")"
+            base64 -i small.jpg | fold -w 3000
+            echo "SHOT_END"
+          done
+
+      - name: Save screenshots and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: |
+            eightcount/shots
+            eightcount/ui-*.xcresult
+          if-no-files-found: ignore
