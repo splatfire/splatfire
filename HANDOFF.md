@@ -1,5 +1,10 @@
 # Where we left off
 
+> **MOVED (18 Oct 2026):** EightCount now lives in its own repo,
+> **https://github.com/splatfire/eightcount-app** (branch `main`). Work there –
+> this branch is no longer updated. On the Mac: `~/eightcount-app`.
+
+
 _Last updated: 18 October 2026 · by Claude Code (cloud session)_
 
 ## State right now

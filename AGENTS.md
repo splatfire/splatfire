@@ -1,5 +1,10 @@
 # Rules for every AI assistant working on this repo
 
+> **MOVED (18 Oct 2026):** EightCount now lives in its own repo,
+> **https://github.com/splatfire/eightcount-app** (branch `main`). Work there –
+> this branch is no longer updated. On the Mac: `~/eightcount-app`.
+
+
 Read by **Cursor** (automatically), **Claude Code** (via `CLAUDE.md`) and any
 other agent. The owner switches between these apps; this file and
 `HANDOFF.md` are how each one knows where the last one stopped.
