@@ -1,0 +1,104 @@
+# Builds EightCount and uploads it to TestFlight, so updates reach your
+# iPhone over the internet (TestFlight app → Update). Needs a PAID Apple
+# Developer Program membership. Until the secrets below exist, this workflow
+# just skips — nothing fails. Setup: eightcount/README.md → "Updates without the cable".
+#
+# Repository secrets (GitHub → Settings → Secrets and variables → Actions):
+#   ASC_KEY_ID          App Store Connect API key ID (e.g. ABC123DEFG)
+#   ASC_ISSUER_ID       Issuer ID shown above the keys list (a UUID)
+#   ASC_KEY_P8_BASE64   the downloaded AuthKey_XXXX.p8, base64-encoded
+#   APPLE_TEAM_ID       your 10-character Team ID
+# Optional repository variable: APP_BUNDLE_ID (if you use your own bundle ID)
+name: EightCount TestFlight
+
+on:
+  push:
+    branches: [claude/nice-bardeen-84bg5p]
+    paths:
+      - "eightcount/EightCount/**"
+      - "eightcount/project.yml"
+      - ".github/workflows/eightcount-testflight.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: eightcount-testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    name: Upload to TestFlight
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_BUNDLE_ID: ${{ vars.APP_BUNDLE_ID }}
+    steps:
+      - name: Is TestFlight set up?
+        id: check
+        run: |
+          if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8_BASE64" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::TestFlight is not set up yet (secrets missing) — skipping. See eightcount/README.md."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.enabled == 'true'
+
+      - name: Generate project
+        if: steps.check.outputs.enabled == 'true'
+        working-directory: eightcount
+        run: |
+          command -v xcodegen || brew install xcodegen
+          xcodegen generate
+
+      - name: Archive (Release, signed with the API key)
+        if: steps.check.outputs.enabled == 'true'
+        working-directory: eightcount
+        run: |
+          set -o pipefail
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          echo "$ASC_KEY_P8_BASE64" | base64 --decode > "$KEY"
+          EXTRA=()
+          [ -n "$APP_BUNDLE_ID" ] && EXTRA+=("EC_APP_BUNDLE_ID=$APP_BUNDLE_ID")
+          xcodebuild archive \
+            -project EightCount.xcodeproj -scheme EightCount -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/EightCount.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" "${EXTRA[@]}" \
+            2>&1 | tee archive.log | grep -E "error:|ARCHIVE (SUCCEEDED|FAILED)" || true
+          grep -q "ARCHIVE SUCCEEDED" archive.log
+
+      - name: Upload to App Store Connect (TestFlight)
+        if: steps.check.outputs.enabled == 'true'
+        working-directory: eightcount
+        run: |
+          set -o pipefail
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          cat > ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/EightCount.xcarchive -exportPath build/export \
+            -exportOptionsPlist ExportOptions.plist -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            2>&1 | tee export.log | grep -E "error:|EXPORT (SUCCEEDED|FAILED)|Upload" || true
+          grep -q "EXPORT SUCCEEDED" export.log
+          echo "::notice::Build ${{ github.run_number }} uploaded. It shows up in TestFlight after Apple's processing (usually 5–30 min)."

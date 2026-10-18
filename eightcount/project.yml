@@ -1,0 +1,84 @@
+# XcodeGen spec. On your Mac run `xcodegen generate` in this folder
+# to create EightCount.xcodeproj (see README.md).
+name: EightCount
+
+options:
+  bundleIdPrefix: io.github.splatfire
+  deploymentTarget:
+    iOS: "17.0"
+    watchOS: "10.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Must be unique across all Apple developers. If Xcode says it
+    # "cannot register" this ID, change it (e.g. add your name).
+    # The watch app gets the same ID + ".watchkitapp".
+    EC_APP_BUNDLE_ID: io.github.splatfire.eightcount  # app bundle ID
+
+targets:
+  EightCount:
+    type: application
+    platform: iOS
+    sources:
+      - path: EightCount
+      - path: Shared
+    dependencies:
+      # The Apple Watch remote, installed together with the iPhone app.
+      - target: EightCountWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(EC_APP_BUNDLE_ID)
+        # Paste your Team ID here so you don't have to re-pick the team in
+        # Xcode every time you run `xcodegen generate` (see README).
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_FILE: EightCount/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        # iPhone (incl. the foldable iPhone Duo) + iPad. Macs with Apple
+        # silicon run it too ("Designed for iPad", turned on in App Store Connect).
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+    scheme:
+      testTargets:
+        - EightCountUITests
+
+  # Apple Watch app: a remote control for the iPhone app (WatchConnectivity).
+  EightCountWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: EightCountWatch
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: EightCountWatch
+        PRODUCT_BUNDLE_IDENTIFIER: $(EC_APP_BUNDLE_ID).watchkitapp
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_FILE: EightCountWatch/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "4"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SKIP_INSTALL: YES
+
+  # Automatic UI tests (run on GitHub's Macs; you don't need them to use the app).
+  EightCountUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: EightCountUITests
+    dependencies:
+      - target: EightCount
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.splatfire.eightcount.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic

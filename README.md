@@ -78,3 +78,9 @@ A second, independent app in this repo: label an installation with a QR code,
 then keep every service visit in a logbook the next technician reads before
 touching anything. Like Splatfire it is a static, offline-first page — see
 [`qrlog/README.md`](qrlog/README.md).
+
+## EightCount iOS app (`eightcount/`)
+
+A third, independent project: a native iPhone app (SwiftUI) for learning dance
+choreography from videos, with slow-motion, mirroring, A-B loops and notes per
+8-count. See [`eightcount/README.md`](eightcount/README.md).
